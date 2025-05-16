@@ -19,10 +19,38 @@ generator client {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   name      String?
-  email     String   @unique
+  email     String    @unique
   password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  threads   Thread[]  @relation("UserThreads")
+  messages  Message[] @relation("UserMessages")
+}
+
+model Thread {
+  id        Int       @id @default(autoincrement())
+  user      User      @relation(fields: [userId], references: [id], name: "UserThreads")
+  userId    Int
+  title     String    @default("New Conversation")
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id          Int       @id @default(autoincrement())
+  thread      Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId    Int
+  user        User?     @relation(fields: [userId], references: [id], name: "UserMessages")
+  userId      Int?
+  senderType  String    //@db.Enum('user', 'LLM')
+  contentType String    //@db.Enum('text', 'link', 'pdf', 'audio')
+  content     String
+  fileName    String?
+  fileSize    Int?
+  filePath    String?
+  fileHash    String?
+  createdAt   DateTime  @default(now())
 }
