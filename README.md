@@ -2,11 +2,12 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+
+`cp env.template .env.local`
+
 First, run the development server:
 
 ```bash
-cp env.template .env.local
-
 npm run dev
 # or
 yarn dev
@@ -38,6 +39,7 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 
+### database setup
 ```sql
 CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
@@ -46,8 +48,11 @@ CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```bash
 # ORM setup
 npx prisma init --datasource-provider mysql
+npx prisma generate
+
 npx prisma migrate dev --name init
 npx prisma migrate dev --name add_thread_and_message
 npx prisma migrate dev --name add_linkText_to_message
+npx prisma migrate dev --name remove_linkText_from_message
 # npx prisma generate
 ```

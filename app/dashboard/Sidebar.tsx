@@ -4,7 +4,9 @@ import {
   Box, 
   Typography, 
   List, 
+  ListItem,
   ListItemButton, 
+  ListItemIcon,
   ListItemText,
   Button, 
   Paper,
@@ -12,6 +14,9 @@ import {
   useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import ChatIcon from '@mui/icons-material/Chat';
+import AnalyticsIcon from '@mui/icons-material/BarChart';
+import Link from 'next/link';
 
 interface Thread {
   id: number;
@@ -21,7 +26,7 @@ interface Thread {
 interface SidebarProps {
   threads: Thread[];
   selectedThreadId: number | null;
-  onThreadSelect: (threadId: number) => void;
+  onThreadSelect: (threadId: number | null) => void;
 }
 
 export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: SidebarProps) {
@@ -58,7 +63,7 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
           {threads.map((thread) => (
             <ListItemButton
               key={thread.id}
-              selected={thread.id === selectedThreadId}
+              selected={selectedThreadId === thread.id}
               onClick={() => onThreadSelect(thread.id)}
               sx={{
                 py: 1.5,
@@ -77,6 +82,7 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
                 }
               }}
             >
+              <ChatIcon sx={{ mr: 1 }} color={selectedThreadId === thread.id ? 'inherit' : 'action'} />
               <ListItemText 
                 primary={thread.title} 
                 primaryTypographyProps={{ 
@@ -95,7 +101,7 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
           fullWidth
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={handleNewConversation}
+          onClick={() => onThreadSelect(null)}
           sx={{
             py: 1,
             backgroundColor: theme.palette.primary.main,
@@ -106,8 +112,32 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
             }
           }}
         >
-          New Conversation
+          New Chat
         </Button>
+      </Box>
+      
+      <Divider />
+      <Box sx={{ p: 1 }}>
+        <Link href="/analytics" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <ListItemButton
+            sx={{
+              borderRadius: '4px',
+              '&:hover': {
+                backgroundColor: theme.palette.action.hover,
+              }
+            }}
+          >
+            <ListItemIcon>
+              <AnalyticsIcon color="action" />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Analytics" 
+              primaryTypographyProps={{ 
+                fontSize: '0.9rem',
+              }}
+            />
+          </ListItemButton>
+        </Link>
       </Box>
     </Paper>
   );

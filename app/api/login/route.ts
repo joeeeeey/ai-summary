@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { trackEvent } from '../../lib/analytics';
 
 const prisma = new PrismaClient();
 
@@ -27,6 +28,16 @@ export async function POST(request: NextRequest) {
 
   // 生成 JWT 令牌
   const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+
+  // Track user login event
+  await trackEvent({
+    eventType: 'user_login',
+    userId: user.id,
+    properties: {
+      email: user.email,
+      loginTime: new Date().toISOString()
+    }
+  });
 
   // 设置 HTTP-only Cookie
   const response = NextResponse.json({ message: 'Login successful.' });

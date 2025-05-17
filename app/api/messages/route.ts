@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import pdfParse from 'pdf-parse';
+import { trackEvent } from '../../lib/analytics';
 
 const prisma = new PrismaClient();
 
@@ -75,6 +76,7 @@ async function authenticateUser(request: NextRequest) {
   }
   
   const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
+  
   return decoded.userId;
 }
 
@@ -115,9 +117,18 @@ async function getOrCreateThread(userId: number, threadId?: number) {
     
     return thread;
   } else {
-    return await prisma.thread.create({
+    const thread = await prisma.thread.create({
       data: { userId },
     });
+    
+    // Track thread creation event
+    await trackEvent({
+      eventType: 'thread_created',
+      userId,
+      threadId: thread.id
+    });
+    
+    return thread;
   }
 }
 
@@ -145,6 +156,16 @@ async function processPdfContent(file: File): Promise<{ content: string, fileNam
     };
   } catch (error) {
     console.error('PDF processing error:', error);
+    
+    // Track error event
+    await trackEvent({
+      eventType: 'error_occurred',
+      properties: {
+        errorType: 'pdf_processing',
+        errorMessage: (error as Error).message
+      }
+    });
+    
     throw new Error(`Failed to process PDF: ${(error as Error).message}`);
   }
 }
@@ -194,6 +215,17 @@ async function scrapeWebContent(url: string): Promise<string> {
     return text;
   } catch (error) {
     console.error('Web scraping error:', error);
+    
+    // Track error event
+    await trackEvent({
+      eventType: 'error_occurred',
+      properties: {
+        errorType: 'url_scraping',
+        errorMessage: (error as Error).message,
+        url
+      }
+    });
+    
     throw new Error(`Failed to scrape web content: ${(error as Error).message}`);
   }
 }
@@ -230,6 +262,19 @@ async function createMessageData(
         fileName,
         fileSize
       });
+      
+      // Track PDF upload event
+      await trackEvent({
+        eventType: 'pdf_upload',
+        userId,
+        threadId: thread.id,
+        properties: {
+          fileName,
+          fileSize,
+          contentLength: content.length
+        }
+      });
+      
       console.log('Added PDF message to userMessages array');
     }
     
@@ -254,6 +299,18 @@ async function createMessageData(
             content: scrapedContent,
             linkUrl: trimmedText
           });
+          
+          // Track link analysis event
+          await trackEvent({
+            eventType: 'linkurl_analysis',
+            userId,
+            threadId: thread.id,
+            properties: {
+              url: trimmedText,
+              contentLength: scrapedContent.length
+            }
+          });
+          
           console.log('Added link message with scraped content to userMessages array');
         } catch (error) {
           console.error('Failed to process URL:', error);
@@ -379,9 +436,31 @@ async function generateAIResponse(messages: any[]) {
       cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens,
     });
     
+    // Track LLM token usage event
+    await trackEvent({
+      eventType: 'llm_token_usage',
+      properties: {
+        promptTokens: usage?.promptTokens || 0,
+        completionTokens: usage?.completionTokens || 0,
+        totalTokens: usage?.totalTokens || 0,
+        model: 'gpt-4o',
+        cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens || false
+      }
+    });
+    
     return text;
   } catch (error) {
     console.error('AI generation error:', error);
+    
+    // Track error event
+    await trackEvent({
+      eventType: 'error_occurred',
+      properties: {
+        errorType: 'ai_generation',
+        errorMessage: (error as Error).message
+      }
+    });
+    
     throw new Error('Failed to generate AI response');
   }
 }
@@ -402,8 +481,10 @@ export async function POST(request: NextRequest) {
     const { userMessages } = await createMessageData(request, userId, thread, requestBody, formData);
     
     // Save all user messages
+    const savedUserMessages = [];
     for (const messageData of userMessages) {
-      await prisma.message.create({ data: messageData });
+      const message = await prisma.message.create({ data: messageData });
+      savedUserMessages.push(message);
     }
     
     // 5. Get all messages in thread
@@ -419,7 +500,7 @@ export async function POST(request: NextRequest) {
     const aiResponse = await generateAIResponse(formattedMessages);
     
     // 8. Save AI response
-    await prisma.message.create({
+    const aiMessage = await prisma.message.create({
       data: {
         threadId: thread.id,
         userId,
@@ -429,6 +510,18 @@ export async function POST(request: NextRequest) {
       },
     });
     
+    // Track successful summary event
+    await trackEvent({
+      eventType: 'summarize_success',
+      userId,
+      threadId: thread.id,
+      messageId: aiMessage.id,
+      properties: {
+        messageType: userMessages[0]?.contentType || 'text',
+        responseLength: aiResponse.length
+      }
+    });
+    
     return NextResponse.json({ 
       message: 'Message sent.', 
       threadId: thread.id 
@@ -436,6 +529,16 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('Error:', error);
+    
+    // Track error event
+    await trackEvent({
+      eventType: 'error_occurred',
+      properties: {
+        errorType: 'api_error',
+        errorMessage: error.message || 'Unknown error',
+        errorStatus: error.status || 500
+      }
+    });
     
     // Structured error handling
     const status = error.status || 500;

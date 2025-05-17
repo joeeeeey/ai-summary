@@ -16,6 +16,7 @@ model User {
   updatedAt DateTime  @updatedAt
   messages  Message[] @relation("UserMessages")
   threads   Thread[]  @relation("UserThreads")
+  events    AnalyticsEvent[] @relation("UserEvents")
 }
 
 model Thread {
@@ -45,7 +46,25 @@ model Message {
   linkUrl     String?
   thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   user        User?    @relation("UserMessages", fields: [userId], references: [id])
+  events      AnalyticsEvent[] @relation("MessageEvents")
 
   @@index([threadId], map: "Message_threadId_fkey")
   @@index([userId], map: "Message_userId_fkey")
+}
+
+model AnalyticsEvent {
+  id          Int       @id @default(autoincrement())
+  eventType   String    // summarize_success, pdf_upload, linkurl_analysis, user_login, llm_token_usage, etc.
+  userId      Int?
+  messageId   Int?
+  threadId    Int?
+  properties  Json?     // For additional event data like token count, file size, etc.
+  createdAt   DateTime  @default(now())
+  user        User?     @relation("UserEvents", fields: [userId], references: [id])
+  message     Message?  @relation("MessageEvents", fields: [messageId], references: [id])
+
+  @@index([userId], map: "AnalyticsEvent_userId_fkey")
+  @@index([messageId], map: "AnalyticsEvent_messageId_fkey")
+  @@index([eventType], map: "AnalyticsEvent_eventType_idx")
+  @@index([createdAt], map: "AnalyticsEvent_createdAt_idx")
 }
