@@ -14,6 +14,9 @@ interface Message {
   id: number;
   senderType: string;
   content: string;
+  contentType: string;
+  fileName?: string;
+  createdAt: string;
 }
 
 export default function DashboardPage() {
@@ -143,13 +146,23 @@ export default function DashboardPage() {
       {/* 主体部分 */ }
       <div style={ { flex: 1, display: 'flex', flexDirection: 'column' } }>
         {/* 消息显示区域 */ }
-        <div style={ { flex: 1, padding: '10px', overflowY: 'auto' } }>
+        <div style={ { 
+          flex: 1, 
+          padding: '10px', 
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column'
+        } }>
           { selectedThreadId ? (
             messages.map((msg) => (
-              <div key={ msg.id } style={ { marginBottom: '10px' } }>
-                <strong>{ msg.senderType === 'user' ? 'You' : 'Assistant' }:</strong>
-                <MessageContent senderType={ msg.senderType } content={ msg.content } />
-              </div>
+              <MessageContent 
+                key={msg.id}
+                senderType={msg.senderType}
+                content={msg.content}
+                contentType={msg.contentType}
+                timestamp={msg.createdAt}
+                fileName={msg.fileName}
+              />
             ))
           ) : (
             <p>Select a thread or start a new conversation.</p>
