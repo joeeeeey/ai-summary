@@ -19,6 +19,12 @@ interface Message {
   createdAt: string;
 }
 
+interface ApiResponse {
+  threadId: number;
+  error?: string;
+  messages?: Message[];
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -27,9 +33,10 @@ export default function DashboardPage() {
   const [input, setInput] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // 获取用户的线程列表
+    // Get user's thread list
     const fetchThreads = async () => {
       const response = await fetch('/api/threads');
       if (response.ok) {
@@ -45,7 +52,7 @@ export default function DashboardPage() {
 
   const fetchMessages = async (threadId: number) => {
     console.log('fetchMessages: ');
-    const response = await fetch(`/api/threads/${ threadId }/messages`);
+    const response = await fetch(`/api/threads/${threadId}/messages`);
     if (response.ok) {
       const data = await response.json();
       setMessages(data.messages);
@@ -76,54 +83,101 @@ export default function DashboardPage() {
   };
 
   const handleSubmit = async () => {
-    if (!input.trim() && !pdfFile) return;
+    if ((!input.trim() && !pdfFile) || isSubmitting) return;
 
-    let response, data;
+    setIsSubmitting(true);
+    
+    // Generate temporary ID for optimistic update
+    const tempId = Date.now();
+    const currentDate = new Date().toISOString();
+    
+    // Create temporary message for optimistic update
+    const tempMessage: Message = {
+      id: tempId,
+      senderType: 'user',
+      content: pdfFile ? '' : input,
+      contentType: pdfFile ? 'pdf' : 'text',
+      fileName: pdfFile?.name,
+      createdAt: currentDate
+    };
+    
+    // Add to messages immediately for UI update
+    setMessages(prev => [...prev, tempMessage]);
+    
+    // Add placeholder for assistant response
+    const loadingMessage: Message = {
+      id: tempId + 1,
+      senderType: 'assistant',
+      content: 'Loading...',
+      contentType: 'text',
+      createdAt: currentDate
+    };
+    
+    setMessages(prev => [...prev, loadingMessage]);
+    
+    // Clear input
+    const inputValue = input;
+    const fileValue = pdfFile;
+    setInput('');
+    setPdfFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
-    if (pdfFile) {
-      console.log('pdfFile: ', pdfFile);
-      // PDF 上传
-      const formData = new FormData();
-      formData.append('file', pdfFile);
-      formData.append('threadId', selectedThreadId ? String(selectedThreadId) : '');
-      // 可选：附加 input 内容作为描述
-      if (input.trim()) formData.append('desc', input);
+    let response: Response;
+    let data: ApiResponse;
 
-      response = await fetch('/api/messages', {
-        method: 'POST',
-        body: formData,
-      });
-    } else {
-      // 文本消息
-      response = await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: input, threadId: selectedThreadId }),
-      });
-    }
+    try {
+      if (fileValue) {
+        console.log('pdfFile: ', fileValue);
+        // PDF upload
+        const formData = new FormData();
+        formData.append('file', fileValue);
+        formData.append('threadId', selectedThreadId ? String(selectedThreadId) : '');
+        // Optional: Add input content as description
+        if (inputValue.trim()) formData.append('desc', inputValue);
 
-    data = await response.json();
-    if (response.ok) {
-      setInput('');
-      setPdfFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (!selectedThreadId) {
-        setThreads((prev) => [{ id: data.threadId, title: 'New Conversation' }, ...prev]);
-        setSelectedThreadId(data.threadId);
+        response = await fetch('/api/messages', {
+          method: 'POST',
+          body: formData,
+        });
       } else {
-        fetchMessages(selectedThreadId!);
+        // Text message
+        response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: inputValue, threadId: selectedThreadId }),
+        });
       }
-    } else if (response.status === 401) {
-      router.push('/login');
-    } else {
-      console.error('Error:', data.error);
+
+      data = await response.json();
+      
+      if (response.ok) {
+        if (!selectedThreadId) {
+          setThreads((prev) => [{ id: data.threadId, title: 'New Conversation' }, ...prev]);
+          setSelectedThreadId(data.threadId);
+        } else {
+          // Replace optimistic updates with real data
+          fetchMessages(selectedThreadId);
+        }
+      } else if (response.status === 401) {
+        router.push('/login');
+      } else {
+        console.error('Error:', data.error);
+        // Remove optimistic updates on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.id !== tempId + 1));
+      }
+    } catch (error) {
+      console.error('Error during submission:', error);
+      // Remove optimistic updates on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.id !== tempId + 1));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
 
   return (
     <div style={ { display: 'flex', height: '100vh' } }>
-      {/* 侧边栏 */ }
+      {/* Sidebar */ }
       <div style={ { width: '250px', borderRight: '1px solid #ccc', padding: '10px' } }>
         <h3>Threads</h3>
         <ul style={ { listStyle: 'none', padding: 0 } }>
@@ -143,9 +197,9 @@ export default function DashboardPage() {
         </ul>
       </div>
 
-      {/* 主体部分 */ }
+      {/* Main content */ }
       <div style={ { flex: 1, display: 'flex', flexDirection: 'column' } }>
-        {/* 消息显示区域 */ }
+        {/* Message display area */ }
         <div style={ { 
           flex: 1, 
           padding: '10px', 
@@ -169,7 +223,7 @@ export default function DashboardPage() {
           ) }
         </div>
 
-        {/* 输入框 */}
+        {/* Input area */}
         <div style={{ padding: '10px', borderTop: '1px solid #ccc' }}>
           <textarea
             value={input}
@@ -184,13 +238,14 @@ export default function DashboardPage() {
               padding: '8px',
               resize: 'vertical'
             }}
-            disabled={!!pdfFile}
+            disabled={!!pdfFile || isSubmitting}
             placeholder={pdfFile ? 'PDF selected, ready to send...' : 'Input the content you want to do summary... (Ctrl+Enter to send)'}
           />
           <button
             onClick={() => fileInputRef.current?.click()}
             style={{ marginRight: '10px' }}
             title="Upload PDF"
+            disabled={isSubmitting}
           >
             +
           </button>
@@ -200,14 +255,21 @@ export default function DashboardPage() {
             style={{ display: 'none' }}
             ref={fileInputRef}
             onChange={handleFileChange}
+            disabled={isSubmitting}
           />
-          <button onClick={handleSubmit} disabled={!input.trim() && !pdfFile}>
-            Send
+          <button onClick={handleSubmit} disabled={(!input.trim() && !pdfFile) || isSubmitting}>
+            {isSubmitting ? 'Sending...' : 'Send'}
           </button>
           {pdfFile && (
             <span style={{ marginLeft: 10, color: '#888' }}>
               {pdfFile.name}
-              <button onClick={() => { setPdfFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} style={{ marginLeft: 5 }}>x</button>
+              <button 
+                onClick={() => { setPdfFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} 
+                style={{ marginLeft: 5 }}
+                disabled={isSubmitting}
+              >
+                x
+              </button>
             </span>
           )}
         </div>

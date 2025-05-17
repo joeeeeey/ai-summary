@@ -18,6 +18,8 @@ export default function MessageContent({ senderType, content, contentType, times
     hour12: true
   }) : '';
 
+  const isUser = senderType === 'user';
+
   // Define styles based on sender type
   const messageStyle = {
     padding: '12px 16px',
@@ -26,8 +28,7 @@ export default function MessageContent({ senderType, content, contentType, times
     marginBottom: '4px',
     position: 'relative' as const,
     color: 'white',
-    backgroundColor: senderType === 'user' ? '#889ccf' : '#555b6e',
-    alignSelf: senderType === 'user' ? 'flex-start' : 'flex-end',
+    backgroundColor: isUser ? '#889ccf' : '#555b6e',
     paddingBottom: '20px', // Add space for timestamp
   };
   
@@ -42,8 +43,15 @@ export default function MessageContent({ senderType, content, contentType, times
   const containerStyle = {
     display: 'flex',
     flexDirection: 'column' as const,
-    alignItems: senderType === 'user' ? 'flex-start' : 'flex-end',
+    alignItems: isUser ? 'flex-end' : 'flex-start', // Reversed alignment
     width: '100%',
+    marginBottom: '8px',
+  };
+
+  const labelStyle = {
+    fontSize: '0.8rem',
+    color: '#888',
+    marginBottom: '4px',
   };
 
   // Render content based on type
@@ -98,6 +106,7 @@ export default function MessageContent({ senderType, content, contentType, times
 
   return (
     <div style={containerStyle}>
+      {!isUser && <div style={labelStyle}>ai-summary</div>}
       <div style={messageStyle}>
         {renderedContent}
         {formattedTime && <span style={timeStyle}>{formattedTime}</span>}
