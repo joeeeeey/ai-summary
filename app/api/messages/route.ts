@@ -152,17 +152,19 @@ async function createMessageData(
   thread: any,
   requestBody: any,
   formData: FormData | null
-): Promise<{ data: MessageData }> {
+): Promise<{ userMessages: MessageData[] }> {
   
   const contentType = request.headers.get('content-type') || '';
+  const userMessages: MessageData[] = [];
   
-  // Handle PDF upload
+  // Check if we have form data
   if (contentType.includes('multipart/form-data') && formData) {
-    const file = formData.get('file') as File;
-    const { content, fileName, fileSize } = await processPdfContent(file);
-    
-    return {
-      data: {
+    // Handle PDF upload if present
+    const file = formData.get('file') as File | null;
+    if (file) {
+      const { content, fileName, fileSize } = await processPdfContent(file);
+      
+      userMessages.push({
         threadId: thread.id,
         userId,
         senderType: 'user',
@@ -170,29 +172,44 @@ async function createMessageData(
         content,
         fileName,
         fileSize
-      }
-    };
+      });
+    }
+    
+    // Handle text input if present
+    const text = formData.get('text') as string | null;
+    if (text && text.trim() !== '') {
+      userMessages.push({
+        threadId: thread.id,
+        userId,
+        senderType: 'user',
+        contentType: 'text',
+        content: text,
+        fileName: '',
+      });
+    }
   } 
-  // Handle text message
+  // Handle legacy JSON request format
   else if (requestBody) {
     const { content } = requestBody;
     if (!content || content.trim() === '') {
       throw new Error('Content cannot be empty');
     }
     
-    return {
-      data: {
-        threadId: thread.id,
-        userId,
-        senderType: 'user',
-        contentType: 'text',
-        content,
-        fileName: '', // Add empty fileName for type compatibility
-      }
-    };
-  } 
+    userMessages.push({
+      threadId: thread.id,
+      userId,
+      senderType: 'user',
+      contentType: 'text',
+      content,
+      fileName: '',
+    });
+  }
   
-  throw new Error('Invalid request format');
+  if (userMessages.length === 0) {
+    throw new Error('No valid message content provided');
+  }
+  
+  return { userMessages };
 }
 
 // 6. Format messages for AI processing
@@ -251,9 +268,13 @@ export async function POST(request: NextRequest) {
     // 3. Get or create thread
     const thread = await getOrCreateThread(userId, threadId);
     
-    // 4. Create user message
-    const messageData = await createMessageData(request, userId, thread, requestBody, formData);
-    await prisma.message.create(messageData);
+    // 4. Create user message(s)
+    const { userMessages } = await createMessageData(request, userId, thread, requestBody, formData);
+    
+    // Save all user messages
+    for (const messageData of userMessages) {
+      await prisma.message.create({ data: messageData });
+    }
     
     // 5. Get all messages in thread
     const allMessages = await prisma.message.findMany({

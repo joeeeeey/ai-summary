@@ -83,41 +83,61 @@ export default function DashboardPage() {
   };
 
   const handleSubmit = async () => {
+    // Check if there's at least one input method (PDF or text)
     if ((!input.trim() && !pdfFile) || isSubmitting) return;
 
     setIsSubmitting(true);
     
-    // Generate temporary ID for optimistic update
+    // Generate temporary IDs for optimistic updates
     const tempId = Date.now();
     const currentDate = new Date().toISOString();
+    const tempMessages: Message[] = [];
+    let tempIdCounter = tempId;
     
-    // Create temporary message for optimistic update
-    const tempMessage: Message = {
-      id: tempId,
-      senderType: 'user',
-      content: pdfFile ? '' : input,
-      contentType: pdfFile ? 'pdf' : 'text',
-      fileName: pdfFile?.name,
-      createdAt: currentDate
-    };
+    // Create temporary PDF message if file exists
+    if (pdfFile) {
+      tempMessages.push({
+        id: tempIdCounter++,
+        senderType: 'user',
+        content: '',
+        contentType: 'pdf',
+        fileName: pdfFile.name,
+        createdAt: currentDate
+      });
+    }
     
-    // Add to messages immediately for UI update
-    setMessages(prev => [...prev, tempMessage]);
+    // Create temporary text message if input exists
+    if (input.trim()) {
+      tempMessages.push({
+        id: tempIdCounter++,
+        senderType: 'user',
+        content: input,
+        contentType: 'text',
+        createdAt: currentDate
+      });
+    }
     
-    // Add placeholder for assistant response
+    // Add loading message
     const loadingMessage: Message = {
-      id: tempId + 1,
+      id: tempIdCounter++,
       senderType: 'assistant',
       content: 'Loading...',
       contentType: 'text',
       createdAt: currentDate
     };
     
-    setMessages(prev => [...prev, loadingMessage]);
+    // Add all temporary messages to the UI
+    setMessages(prev => [...prev, ...tempMessages, loadingMessage]);
     
-    // Clear input
+    // Store IDs for potential cleanup
+    const tempIds = tempMessages.map(msg => msg.id);
+    tempIds.push(loadingMessage.id);
+    
+    // Save input values before clearing
     const inputValue = input;
     const fileValue = pdfFile;
+    
+    // Clear inputs
     setInput('');
     setPdfFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -126,28 +146,26 @@ export default function DashboardPage() {
     let data: ApiResponse;
 
     try {
+      // Prepare the form data for submission
+      const formData = new FormData();
+      
       if (fileValue) {
-        console.log('pdfFile: ', fileValue);
-        // PDF upload
-        const formData = new FormData();
         formData.append('file', fileValue);
-        formData.append('threadId', selectedThreadId ? String(selectedThreadId) : '');
-        // Optional: Add input content as description
-        if (inputValue.trim()) formData.append('desc', inputValue);
-
-        response = await fetch('/api/messages', {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        // Text message
-        response = await fetch('/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: inputValue, threadId: selectedThreadId }),
-        });
       }
-
+      
+      if (inputValue.trim()) {
+        formData.append('text', inputValue);
+      }
+      
+      // Add threadId if we have one
+      formData.append('threadId', selectedThreadId ? String(selectedThreadId) : '');
+      
+      // Make the API request
+      response = await fetch('/api/messages', {
+        method: 'POST',
+        body: formData,
+      });
+      
       data = await response.json();
       
       if (response.ok) {
@@ -163,12 +181,12 @@ export default function DashboardPage() {
       } else {
         console.error('Error:', data.error);
         // Remove optimistic updates on error
-        setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.id !== tempId + 1));
+        setMessages(prev => prev.filter(msg => !tempIds.includes(msg.id)));
       }
     } catch (error) {
       console.error('Error during submission:', error);
       // Remove optimistic updates on error
-      setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.id !== tempId + 1));
+      setMessages(prev => prev.filter(msg => !tempIds.includes(msg.id)));
     } finally {
       setIsSubmitting(false);
     }
@@ -238,8 +256,8 @@ export default function DashboardPage() {
               padding: '8px',
               resize: 'vertical'
             }}
-            disabled={!!pdfFile || isSubmitting}
-            placeholder={pdfFile ? 'PDF selected, ready to send...' : 'Input the content you want to do summary... (Ctrl+Enter to send)'}
+            disabled={isSubmitting}
+            placeholder="Input the content you want to do summary... (Ctrl+Enter to send)"
           />
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -257,7 +275,10 @@ export default function DashboardPage() {
             onChange={handleFileChange}
             disabled={isSubmitting}
           />
-          <button onClick={handleSubmit} disabled={(!input.trim() && !pdfFile) || isSubmitting}>
+          <button 
+            onClick={handleSubmit} 
+            disabled={((!input.trim() && !pdfFile) || isSubmitting)}
+          >
             {isSubmitting ? 'Sending...' : 'Send'}
           </button>
           {pdfFile && (
