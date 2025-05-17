@@ -94,30 +94,45 @@ export default function DashboardPage() {
     const tempMessages: Message[] = [];
     let tempIdCounter = tempId;
     
-    // Create temporary PDF message if file exists
-    if (pdfFile) {
-      tempMessages.push({
+    // Save input values before clearing inputs
+    const inputValue = input;
+    const fileValue = pdfFile;
+    
+    // Clear inputs immediately for better UX
+    setInput('');
+    setPdfFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    
+    // Build the array of temporary messages in correct order
+    
+    // 1. Always add PDF message first if it exists
+    if (fileValue) {
+      const pdfMessage = {
         id: tempIdCounter++,
         senderType: 'user',
-        content: '',
+        content: '', // PDF content is empty on frontend
         contentType: 'pdf',
-        fileName: pdfFile.name,
+        fileName: fileValue.name,
         createdAt: currentDate
-      });
+      };
+      tempMessages.push(pdfMessage);
+      console.log('Added PDF message:', pdfMessage);
     }
     
-    // Create temporary text message if input exists
-    if (input.trim()) {
-      tempMessages.push({
+    // 2. Then add text message if it exists
+    if (inputValue.trim()) {
+      const textMessage = {
         id: tempIdCounter++,
         senderType: 'user',
-        content: input,
+        content: inputValue,
         contentType: 'text',
         createdAt: currentDate
-      });
+      };
+      tempMessages.push(textMessage);
+      console.log('Added text message:', textMessage);
     }
     
-    // Add loading message
+    // 3. Add loading message
     const loadingMessage: Message = {
       id: tempIdCounter++,
       senderType: 'assistant',
@@ -126,21 +141,17 @@ export default function DashboardPage() {
       createdAt: currentDate
     };
     
-    // Add all temporary messages to the UI
-    setMessages(prev => [...prev, ...tempMessages, loadingMessage]);
+    console.log('All temp messages before update:', [...tempMessages, loadingMessage]);
+    
+    // Single update to add all messages to UI in correct order
+    setMessages(prev => {
+      const updatedMessages = [...prev, ...tempMessages, loadingMessage];
+      console.log('Updated messages state:', updatedMessages);
+      return updatedMessages;
+    });
     
     // Store IDs for potential cleanup
-    const tempIds = tempMessages.map(msg => msg.id);
-    tempIds.push(loadingMessage.id);
-    
-    // Save input values before clearing
-    const inputValue = input;
-    const fileValue = pdfFile;
-    
-    // Clear inputs
-    setInput('');
-    setPdfFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    const tempIds = [...tempMessages.map(msg => msg.id), loadingMessage.id];
 
     let response: Response;
     let data: ApiResponse;

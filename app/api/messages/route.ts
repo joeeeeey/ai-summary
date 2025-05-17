@@ -157,11 +157,15 @@ async function createMessageData(
   const contentType = request.headers.get('content-type') || '';
   const userMessages: MessageData[] = [];
   
+  console.log('Creating message data with content-type:', contentType);
+  console.log('Form data available:', !!formData);
+  
   // Check if we have form data
   if (contentType.includes('multipart/form-data') && formData) {
     // Handle PDF upload if present
     const file = formData.get('file') as File | null;
     if (file) {
+      console.log('Processing PDF file:', file.name);
       const { content, fileName, fileSize } = await processPdfContent(file);
       
       userMessages.push({
@@ -173,11 +177,13 @@ async function createMessageData(
         fileName,
         fileSize
       });
+      console.log('Added PDF message to userMessages array');
     }
     
     // Handle text input if present
     const text = formData.get('text') as string | null;
     if (text && text.trim() !== '') {
+      console.log('Processing text input:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
       userMessages.push({
         threadId: thread.id,
         userId,
@@ -186,6 +192,7 @@ async function createMessageData(
         content: text,
         fileName: '',
       });
+      console.log('Added text message to userMessages array');
     }
   } 
   // Handle legacy JSON request format
@@ -209,6 +216,7 @@ async function createMessageData(
     throw new Error('No valid message content provided');
   }
   
+  console.log('Total messages created:', userMessages.length);
   return { userMessages };
 }
 
