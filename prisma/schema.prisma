@@ -1,21 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-// generator client {
-//   provider = "prisma-client-js"
-//   output   = "../generated/prisma"
-// }
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
 }
 
 model User {
@@ -25,33 +14,38 @@ model User {
   password  String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  threads   Thread[]  @relation("UserThreads")
   messages  Message[] @relation("UserMessages")
+  threads   Thread[]  @relation("UserThreads")
 }
 
 model Thread {
   id        Int       @id @default(autoincrement())
-  user      User      @relation(fields: [userId], references: [id], name: "UserThreads")
   userId    Int
   title     String    @default("New Conversation")
-  messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  messages  Message[]
+  user      User      @relation("UserThreads", fields: [userId], references: [id])
+
+  @@index([userId], map: "Thread_userId_fkey")
 }
 
 model Message {
-  id          Int       @id @default(autoincrement())
-  thread      Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
   threadId    Int
-  user        User?     @relation(fields: [userId], references: [id], name: "UserMessages")
   userId      Int?
-  senderType  String    //@db.Enum('user', 'LLM')
-  contentType String    //@db.Enum('text', 'link', 'pdf', 'audio')
-  content     String    @db.Text // Change to Text to allow longer content
-  linkUrl     String?   // URL for link-type messages
+  senderType  String
+  contentType String
+  content     String   @db.Text
   fileName    String?
   fileSize    Int?
   filePath    String?
   fileHash    String?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
+  linkUrl     String?
+  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user        User?    @relation("UserMessages", fields: [userId], references: [id])
+
+  @@index([threadId], map: "Message_threadId_fkey")
+  @@index([userId], map: "Message_userId_fkey")
 }
