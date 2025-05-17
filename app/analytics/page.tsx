@@ -27,7 +27,9 @@ import {
   Button,
   Stack,
   TablePagination,
-  Tooltip
+  Tooltip,
+  Tabs,
+  Tab
 } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { PieChart } from '@mui/x-charts/PieChart';
@@ -98,8 +100,56 @@ const eventColors: Record<string, string> = {
   'error_occurred': '#f44336'
 };
 
+// Helper function to parse event properties consistently
+const parseProperties = (event: AnalyticsEvent): any => {
+  if (!event.properties) return {};
+  
+  try {
+    return typeof event.properties === 'string'
+      ? JSON.parse(event.properties)
+      : event.properties;
+  } catch (e) {
+    console.error('Error parsing event properties:', e);
+    return {};
+  }
+}
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`analytics-tabpanel-${index}`}
+      aria-labelledby={`analytics-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ py: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+function a11yProps(index: number) {
+  return {
+    id: `analytics-tab-${index}`,
+    'aria-controls': `analytics-tabpanel-${index}`,
+  };
+}
+
 export default function AnalyticsPage() {
   const router = useRouter();
+  const [tabValue, setTabValue] = useState<number>(0);
   const [timeRange, setTimeRange] = useState<number>(3);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
@@ -116,7 +166,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch analytics data based on selected time range
+  // Fetch analytics data based on selected time range and tab
   useEffect(() => {
     const fetchAnalytics = async () => {
       setLoading(true);
@@ -135,24 +185,37 @@ export default function AnalyticsPage() {
         const types = summaryJson.data.map((item: EventCount) => item.eventType);
         setEventTypes(types);
         
-        // Fetch token usage data
-        const tokenUsageResponse = await fetch(`/api/analytics?type=token-usage&days=${timeRange}`);
-        if (!tokenUsageResponse.ok) {
-          throw new Error('Failed to fetch token usage data');
+        // Fetch data based on active tab
+        if (tabValue === 0) {
+          // Fetch token usage data for LLM Usage tab
+          const tokenUsageResponse = await fetch(`/api/analytics?type=token-usage&days=${timeRange}`);
+          if (!tokenUsageResponse.ok) {
+            throw new Error('Failed to fetch token usage data');
+          }
+          const tokenUsageJson = await tokenUsageResponse.json();
+          setTokenUsageData(tokenUsageJson.data || []);
+          
+          // Fetch user token usage data
+          const userTokenResponse = await fetch(`/api/analytics?type=user-token-usage&days=${timeRange}`);
+          if (!userTokenResponse.ok) {
+            throw new Error('Failed to fetch user token usage data');
+          }
+          const userTokenJson = await userTokenResponse.json();
+          setUserTokenUsage(userTokenJson.data || []);
         }
-        const tokenUsageJson = await tokenUsageResponse.json();
-        setTokenUsageData(tokenUsageJson.data || []);
         
-        // Fetch user token usage data
-        const userTokenResponse = await fetch(`/api/analytics?type=user-token-usage&days=${timeRange}`);
-        if (!userTokenResponse.ok) {
-          throw new Error('Failed to fetch user token usage data');
+        // Fetch recent events based on active tab
+        const eventTypes = [
+          'llm_token_usage',
+          'pdf_upload',
+          'linkurl_analysis',
+          'user_login',
+          'error_occurred'
+        ];
+        
+        if (tabValue >= 0 && tabValue < eventTypes.length) {
+          fetchEvents(1, eventTypes[tabValue]);
         }
-        const userTokenJson = await userTokenResponse.json();
-        setUserTokenUsage(userTokenJson.data || []);
-        
-        // Fetch recent events (with pagination)
-        fetchEvents(1);
         
       } catch (err) {
         console.error('Error fetching analytics:', err);
@@ -168,12 +231,18 @@ export default function AnalyticsPage() {
     };
     
     fetchAnalytics();
-  }, [timeRange, router]);
+  }, [timeRange, tabValue, router]);
 
   // Function to fetch events with pagination
-  const fetchEvents = async (page: number) => {
+  const fetchEvents = async (page: number, eventType?: string) => {
     try {
-      const eventsResponse = await fetch(`/api/analytics?type=events&days=${timeRange}&limit=10&page=${page}&eventType=llm_token_usage`);
+      const targetEventType = eventType || (tabValue === 0 ? 'llm_token_usage' : 
+                            tabValue === 1 ? 'pdf_upload' : 
+                            tabValue === 2 ? 'linkurl_analysis' : 
+                            tabValue === 3 ? 'user_login' :
+                            tabValue === 4 ? 'error_occurred' : undefined);
+      
+      const eventsResponse = await fetch(`/api/analytics?type=events&days=${timeRange}&limit=10&page=${page}${targetEventType ? `&eventType=${targetEventType}` : ''}`);
       if (!eventsResponse.ok) {
         throw new Error('Failed to fetch events');
       }
@@ -313,6 +382,24 @@ export default function AnalyticsPage() {
 
   const tokenSummary = calculateTokenSummary();
 
+  // Add tab change handler
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+    
+    // Fetch events for the selected tab
+    const eventTypes = [
+      'llm_token_usage',
+      'pdf_upload',
+      'linkurl_analysis',
+      'user_login',
+      'error_occurred'
+    ];
+    
+    if (newValue >= 0 && newValue < eventTypes.length) {
+      fetchEvents(1, eventTypes[newValue]);
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -345,8 +432,25 @@ export default function AnalyticsPage() {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
-        LLM Usage Analytics
+        Analytics Dashboard
       </Typography>
+      
+      {/* Tabs Navigation */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange} 
+          aria-label="analytics tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label="LLM Usage" {...a11yProps(0)} />
+          <Tab label="PDF Uploads" {...a11yProps(1)} />
+          <Tab label="Link Analysis" {...a11yProps(2)} />
+          <Tab label="User Activity" {...a11yProps(3)} />
+          <Tab label="Errors" {...a11yProps(4)} />
+        </Tabs>
+      </Box>
       
       {/* Time range selector */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'flex-end' }}>
@@ -366,197 +470,747 @@ export default function AnalyticsPage() {
         </FormControl>
       </Box>
       
-      {/* Summary cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">
-                Total Tokens Used
-              </Typography>
-              <Typography variant="h4">
-                {formatNumber(tokenSummary.totalTokens)}
-              </Typography>
-            </CardContent>
-          </Card>
+      {/* LLM Usage Tab */}
+      <TabPanel value={tabValue} index={0}>
+        {/* Summary cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Total Tokens Used
+                </Typography>
+                <Typography variant="h4">
+                  {formatNumber(tokenSummary.totalTokens)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Cache Hit Rate
+                </Typography>
+                <Typography variant="h4">
+                  {tokenSummary.cacheRate}%
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  API Requests
+                </Typography>
+                <Typography variant="h4">
+                  {tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Avg Tokens per Request
+                </Typography>
+                <Typography variant="h4">
+                  {tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0) > 0
+                    ? formatNumber(Math.round(tokenSummary.totalTokens / tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0)))
+                    : 0}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">
-                Cache Hit Rate
+        {/* Token usage charts */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          {/* Token usage line chart */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: 400 }}>
+              <Typography variant="h6" gutterBottom>
+                Token Usage Over Time
               </Typography>
-              <Typography variant="h4">
-                {tokenSummary.cacheRate}%
+              {tokenUsageData.length > 0 ? (
+                <LineChart
+                  xAxis={tokenUsageChartData.xAxis}
+                  series={tokenUsageChartData.series}
+                  height={320}
+                />
+              ) : (
+                <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography>No data available</Typography>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
+          
+          {/* Cache hit rate chart */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2, height: 400 }}>
+              <Typography variant="h6" gutterBottom>
+                Cache Hit Rate (%)
               </Typography>
-            </CardContent>
-          </Card>
+              {tokenUsageData.length > 0 ? (
+                <LineChart
+                  xAxis={cacheRateChartData.xAxis}
+                  series={cacheRateChartData.series}
+                  height={320}
+                />
+              ) : (
+                <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography>No data available</Typography>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">
-                API Requests
+        {/* User token usage bar chart */}
+        <Grid container sx={{ mb: 4 }}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2, height: 400 }}>
+              <Typography variant="h6" gutterBottom>
+                Token Usage by User (Top 10)
               </Typography>
-              <Typography variant="h4">
-                {tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0)}
-              </Typography>
-            </CardContent>
-          </Card>
+              {userTokenUsage.length > 0 ? (
+                <BarChart
+                  xAxis={userTokenChartData.xAxis}
+                  series={userTokenChartData.series}
+                  height={320}
+                />
+              ) : (
+                <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography>No data available</Typography>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">
-                Avg Tokens per Request
-              </Typography>
-              <Typography variant="h4">
-                {tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0) > 0
-                  ? formatNumber(Math.round(tokenSummary.totalTokens / tokenUsageData.reduce((sum, day) => sum + day.requestCount, 0)))
-                  : 0}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-      
-      {/* Token usage charts */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Token usage line chart */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2, height: 400 }}>
-            <Typography variant="h6" gutterBottom>
-              Token Usage Over Time
-            </Typography>
-            {tokenUsageData.length > 0 ? (
-              <LineChart
-                xAxis={tokenUsageChartData.xAxis}
-                series={tokenUsageChartData.series}
-                height={320}
-              />
-            ) : (
-              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography>No data available</Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
+        {/* Recent token usage events */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5">
+            Recent Token Usage Events
+          </Typography>
+        </Box>
         
-        {/* Cache hit rate chart */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2, height: 400 }}>
-            <Typography variant="h6" gutterBottom>
-              Cache Hit Rate (%)
-            </Typography>
-            {tokenUsageData.length > 0 ? (
-              <LineChart
-                xAxis={cacheRateChartData.xAxis}
-                series={cacheRateChartData.series}
-                height={320}
-              />
-            ) : (
-              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography>No data available</Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
-      
-      {/* User token usage bar chart */}
-      <Grid container sx={{ mb: 4 }}>
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2, height: 400 }}>
-            <Typography variant="h6" gutterBottom>
-              Token Usage by User (Top 10)
-            </Typography>
-            {userTokenUsage.length > 0 ? (
-              <BarChart
-                xAxis={userTokenChartData.xAxis}
-                series={userTokenChartData.series}
-                height={320}
-              />
-            ) : (
-              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography>No data available</Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
-      
-      {/* Recent token usage events */}
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h5">
-          Recent Token Usage Events
-        </Typography>
-      </Box>
-      
-      <TableContainer component={Paper} sx={{ mb: 2 }}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Date</TableCell>
-              <TableCell>User</TableCell>
-              <TableCell>Prompt Tokens</TableCell>
-              <TableCell>Completion Tokens</TableCell>
-              <TableCell>Total Tokens</TableCell>
-              <TableCell>Cached</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {events.map((event) => {
-              const props = event.properties || {};
-              return (
-                <TableRow key={event.id}>
-                  <TableCell>{formatDate(event.createdAt)}</TableCell>
-                  <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
-                  <TableCell>{formatNumber(props.promptTokens || 0)}</TableCell>
-                  <TableCell>{formatNumber(props.completionTokens || 0)}</TableCell>
-                  <TableCell>{formatNumber(props.totalTokens || 0)}</TableCell>
-                  <TableCell>
-                    {props.cachedPromptTokens ? (
-                      <Chip 
-                        label="Cached" 
-                        size="small"
-                        sx={{ bgcolor: '#4caf50', color: 'white' }}
-                      />
-                    ) : (
-                      <Chip 
-                        label="No" 
-                        size="small"
-                        sx={{ bgcolor: '#bdbdbd', color: 'white' }}
-                      />
-                    )}
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>User</TableCell>
+                <TableCell>Prompt Tokens</TableCell>
+                <TableCell>Completion Tokens</TableCell>
+                <TableCell>Total Tokens</TableCell>
+                <TableCell>Cached</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => {
+                const props = parseProperties(event);
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>{formatDate(event.createdAt)}</TableCell>
+                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
+                    <TableCell>{formatNumber(props.promptTokens || 0)}</TableCell>
+                    <TableCell>{formatNumber(props.completionTokens || 0)}</TableCell>
+                    <TableCell>{formatNumber(props.totalTokens || 0)}</TableCell>
+                    <TableCell>
+                      {props.cachedPromptTokens ? (
+                        <Chip 
+                          label="Cached" 
+                          size="small"
+                          sx={{ bgcolor: '#4caf50', color: 'white' }}
+                        />
+                      ) : (
+                        <Chip 
+                          label="No" 
+                          size="small"
+                          sx={{ bgcolor: '#bdbdbd', color: 'white' }}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No token usage events found
                   </TableCell>
                 </TableRow>
-              );
-            })}
-            {events.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  No token usage events found
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Pagination 
+              count={pagination.totalPages} 
+              page={pagination.page} 
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
+        )}
+      </TabPanel>
       
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
-          <Pagination 
-            count={pagination.totalPages} 
-            page={pagination.page} 
-            onChange={handlePageChange}
-            color="primary"
-          />
+      {/* PDF Uploads Tab */}
+      <TabPanel value={tabValue} index={1}>
+        {/* Summary cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Total PDF Uploads
+                </Typography>
+                <Typography variant="h4">
+                  {summaryData.find(item => item.eventType === 'pdf_upload')?.count || 0}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Average File Size
+                </Typography>
+                <Typography variant="h4">
+                  {events.length > 0 
+                    ? formatNumber(Math.round(events.reduce((sum, event) => 
+                        sum + (parseProperties(event)?.fileSize || 0), 0) / events.length)) + ' KB'
+                    : '0 KB'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Avg Content Length
+                </Typography>
+                <Typography variant="h4">
+                  {events.length > 0 
+                    ? formatNumber(Math.round(events.reduce((sum, event) => 
+                        sum + (parseProperties(event)?.contentLength || 0), 0) / events.length))
+                    : '0'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Uploads Today
+                </Typography>
+                <Typography variant="h4">
+                  {events.filter(event => {
+                    const today = new Date();
+                    const eventDate = new Date(event.createdAt);
+                    return today.toDateString() === eventDate.toDateString();
+                  }).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Recent PDF upload events */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5">
+            Recent PDF Uploads
+          </Typography>
         </Box>
-      )}
+        
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>User</TableCell>
+                <TableCell>File Name</TableCell>
+                <TableCell>File Size (KB)</TableCell>
+                <TableCell>Content Length</TableCell>
+                <TableCell>Thread ID</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => {
+                const props = parseProperties(event);
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>{formatDate(event.createdAt)}</TableCell>
+                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
+                    <TableCell>{props.fileName || 'Unnamed'}</TableCell>
+                    <TableCell>{formatNumber(props.fileSize ? Math.round(props.fileSize / 1024) : 0)}</TableCell>
+                    <TableCell>{formatNumber(props.contentLength || 0)}</TableCell>
+                    <TableCell>{event.threadId || 'N/A'}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No PDF upload events found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Pagination 
+              count={pagination.totalPages} 
+              page={pagination.page} 
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
+        )}
+      </TabPanel>
+      
+      {/* Link Analysis Tab */}
+      <TabPanel value={tabValue} index={2}>
+        {/* Summary cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Total Link Analyses
+                </Typography>
+                <Typography variant="h4">
+                  {summaryData.find(item => item.eventType === 'linkurl_analysis')?.count || 0}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Average Content Length
+                </Typography>
+                <Typography variant="h4">
+                  {events.length > 0 
+                    ? formatNumber(Math.round(events.reduce((sum, event) => 
+                        sum + (parseProperties(event)?.contentLength || 0), 0) / events.length))
+                    : '0'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Links Today
+                </Typography>
+                <Typography variant="h4">
+                  {events.filter(event => {
+                    const today = new Date();
+                    const eventDate = new Date(event.createdAt);
+                    return today.toDateString() === eventDate.toDateString();
+                  }).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Success Rate
+                </Typography>
+                <Typography variant="h4">
+                  {events.length > 0 
+                    ? Math.round(events.filter(event => 
+                        parseProperties(event)?.success === true).length / events.length * 100) + '%'
+                    : '0%'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Recent link analysis events */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5">
+            Recent Link Analyses
+          </Typography>
+        </Box>
+        
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>User</TableCell>
+                <TableCell>URL</TableCell>
+                <TableCell>Content Length</TableCell>
+                <TableCell>Thread ID</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => {
+                const props = parseProperties(event);
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>{formatDate(event.createdAt)}</TableCell>
+                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
+                    <TableCell>
+                      <Tooltip title={props.url || 'Unknown'}>
+                        <Typography noWrap sx={{ maxWidth: 250 }}>
+                          {props.url || 'Unknown'}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>{formatNumber(props.contentLength || 0)}</TableCell>
+                    <TableCell>{event.threadId || 'N/A'}</TableCell>
+                    <TableCell>
+                      {props.success ? (
+                        <Chip 
+                          label="Success" 
+                          size="small"
+                          sx={{ bgcolor: '#4caf50', color: 'white' }}
+                        />
+                      ) : (
+                        <Chip 
+                          label="Failed" 
+                          size="small"
+                          sx={{ bgcolor: '#f44336', color: 'white' }}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No link analysis events found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Pagination 
+              count={pagination.totalPages} 
+              page={pagination.page} 
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
+        )}
+      </TabPanel>
+      
+      {/* User Activity Tab */}
+      <TabPanel value={tabValue} index={3}>
+        {/* Summary cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Total Logins
+                </Typography>
+                <Typography variant="h4">
+                  {summaryData.find(item => item.eventType === 'user_login')?.count || 0}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Logins Today
+                </Typography>
+                <Typography variant="h4">
+                  {events.filter(event => {
+                    const today = new Date();
+                    const eventDate = new Date(event.createdAt);
+                    return today.toDateString() === eventDate.toDateString();
+                  }).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Active Users
+                </Typography>
+                <Typography variant="h4">
+                  {events.reduce((users, event) => {
+                    if (event.userId && !users.includes(event.userId)) {
+                      users.push(event.userId);
+                    }
+                    return users;
+                  }, [] as number[]).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Unique Devices
+                </Typography>
+                <Typography variant="h4">
+                  {events.reduce((devices, event) => {
+                    const props = parseProperties(event);
+                    if (props.deviceId && !devices.includes(props.deviceId)) {
+                      devices.push(props.deviceId);
+                    }
+                    return devices;
+                  }, [] as string[]).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Recent user login events */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5">
+            Recent Login Activity
+          </Typography>
+        </Box>
+        
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>User</TableCell>
+                <TableCell>IP Address</TableCell>
+                <TableCell>Device</TableCell>
+                <TableCell>Browser</TableCell>
+                <TableCell>Login Method</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => {
+                const props = parseProperties(event);
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>{formatDate(event.createdAt)}</TableCell>
+                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
+                    <TableCell>{props.ipAddress || 'Unknown'}</TableCell>
+                    <TableCell>{props.device || 'Unknown'}</TableCell>
+                    <TableCell>{props.browser || 'Unknown'}</TableCell>
+                    <TableCell>{props.method || 'Password'}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No user login events found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Pagination 
+              count={pagination.totalPages} 
+              page={pagination.page} 
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
+        )}
+      </TabPanel>
+      
+      {/* Errors Tab */}
+      <TabPanel value={tabValue} index={4}>
+        {/* Summary cards */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Total Errors
+                </Typography>
+                <Typography variant="h4">
+                  {summaryData.find(item => item.eventType === 'error_occurred')?.count || 0}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Errors Today
+                </Typography>
+                <Typography variant="h4">
+                  {events.filter(event => {
+                    const today = new Date();
+                    const eventDate = new Date(event.createdAt);
+                    return today.toDateString() === eventDate.toDateString();
+                  }).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Most Common Error
+                </Typography>
+                <Typography variant="h4" sx={{ fontSize: '1.5rem' }}>
+                  {events.length > 0 
+                    ? (() => {
+                        const counts = events.reduce((counts, event) => {
+                          const props = parseProperties(event);
+                          const errorType = props.errorType || 'Unknown';
+                          counts[errorType] = (counts[errorType] || 0) + 1;
+                          return counts;
+                        }, {} as Record<string, number>);
+                        const entries = Object.entries(counts);
+                        return entries.sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+                      })()
+                    : 'None'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Affected Users
+                </Typography>
+                <Typography variant="h4">
+                  {events.reduce((users, event) => {
+                    if (event.userId && !users.includes(event.userId)) {
+                      users.push(event.userId);
+                    }
+                    return users;
+                  }, [] as number[]).length}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* Recent error events */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h5">
+            Recent Errors
+          </Typography>
+        </Box>
+        
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>User</TableCell>
+                <TableCell>Error Type</TableCell>
+                <TableCell>Message</TableCell>
+                <TableCell>Location</TableCell>
+                <TableCell>Severity</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((event) => {
+                const props = parseProperties(event);
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>{formatDate(event.createdAt)}</TableCell>
+                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
+                    <TableCell>{props.errorType || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Tooltip title={props.message || 'Unknown'}>
+                        <Typography noWrap sx={{ maxWidth: 250 }}>
+                          {props.message || 'Unknown'}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>{props.location || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={props.severity || 'Error'} 
+                        size="small"
+                        sx={{ 
+                          bgcolor: props.severity === 'Critical' ? '#f44336' : 
+                                  props.severity === 'Warning' ? '#ff9800' : '#bdbdbd',
+                          color: 'white' 
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {events.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No error events found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+            <Pagination 
+              count={pagination.totalPages} 
+              page={pagination.page} 
+              onChange={handlePageChange}
+              color="primary"
+            />
+          </Box>
+        )}
+      </TabPanel>
     </Container>
   );
 } 
