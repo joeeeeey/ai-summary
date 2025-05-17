@@ -13,8 +13,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     const userId = decoded.userId;
-    console.log('params.id: ', params.id);
-    const threadId = parseInt(params.id);
+    
+    // 确保 params 是已解析的
+    const threadId = parseInt(params?.id || '0');
+    
+    if (isNaN(threadId) || threadId <= 0) {
+      return NextResponse.json({ error: 'Invalid thread ID' }, { status: 400 });
+    }
 
     // 检查线程是否属于当前用户
     const thread = await prisma.thread.findFirst({
