@@ -72,34 +72,6 @@ export default function DashboardPage() {
     }
   };
 
-  // const handleSubmit = async () => {
-  //   if (!input.trim()) return;
-
-  //   const response = await fetch('/api/messages', {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ content: input, threadId: selectedThreadId }),
-  //   });
-
-  //   const data = await response.json();
-
-  //   if (response.ok) {
-  //     setInput('');
-  //     // 如果是新线程，添加到线程列表并选中
-  //     if (!selectedThreadId) {
-  //       setThreads((prev) => [{ id: data.threadId, title: 'New Conversation' }, ...prev]);
-  //       setSelectedThreadId(data.threadId);
-  //     } else {
-  //       // 更新消息列表
-  //       fetchMessages(selectedThreadId);
-  //     }
-  //   } else if (response.status === 401) {
-  //     router.push('/login');
-  //   } else {
-  //     console.error('Error:', data.error);
-  //   }
-  // };
-
   const handleSubmit = async () => {
     if (!input.trim() && !pdfFile) return;
 
@@ -184,37 +156,27 @@ export default function DashboardPage() {
           ) }
         </div>
 
-        {/* 输入框 */ }
-        {/* <div style={{ padding: '10px', borderTop: '1px solid #ccc' }}>
-          <input
-            type="text"
+        {/* 输入框 */}
+        <div style={{ padding: '10px', borderTop: '1px solid #ccc' }}>
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSubmit();
+              if (e.key === 'Enter' && e.ctrlKey) handleSubmit();
             }}
-            style={{ width: '80%', marginRight: '10px' }}
-          />
-          <button onClick={handleSubmit} disabled={!input.trim()}>
-            Send
-          </button>
-        </div> */}
-
-        <div style={ { padding: '10px', borderTop: '1px solid #ccc' } }>
-          <input
-            type="text"
-            value={ input }
-            onChange={ (e) => setInput(e.target.value) }
-            onKeyDown={ (e) => {
-              if (e.key === 'Enter') handleSubmit();
-            } }
-            style={ { width: '70%', marginRight: '10px' } }
-            disabled={ !!pdfFile }
-            placeholder={ pdfFile ? 'PDF selected, ready to send...' : 'Type a message' }
+            style={{ 
+              width: '70%', 
+              marginRight: '10px',
+              minHeight: '60px',
+              padding: '8px',
+              resize: 'vertical'
+            }}
+            disabled={!!pdfFile}
+            placeholder={pdfFile ? 'PDF selected, ready to send...' : 'Input the content you want to do summary... (Ctrl+Enter to send)'}
           />
           <button
-            onClick={ () => fileInputRef.current?.click() }
-            style={ { marginRight: '10px' } }
+            onClick={() => fileInputRef.current?.click()}
+            style={{ marginRight: '10px' }}
             title="Upload PDF"
           >
             +
@@ -222,19 +184,19 @@ export default function DashboardPage() {
           <input
             type="file"
             accept="application/pdf"
-            style={ { display: 'none' } }
-            ref={ fileInputRef }
-            onChange={ handleFileChange }
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+            onChange={handleFileChange}
           />
-          <button onClick={ handleSubmit } disabled={ !input.trim() && !pdfFile }>
+          <button onClick={handleSubmit} disabled={!input.trim() && !pdfFile}>
             Send
           </button>
-          { pdfFile && (
-            <span style={ { marginLeft: 10, color: '#888' } }>
-              { pdfFile.name }
-              <button onClick={ () => { setPdfFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; } } style={ { marginLeft: 5 } }>x</button>
+          {pdfFile && (
+            <span style={{ marginLeft: 10, color: '#888' }}>
+              {pdfFile.name}
+              <button onClick={() => { setPdfFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} style={{ marginLeft: 5 }}>x</button>
             </span>
-          ) }
+          )}
         </div>
       </div>
     </div>
