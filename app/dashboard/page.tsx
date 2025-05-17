@@ -103,6 +103,7 @@ interface Message {
   content: string;
   contentType: string;
   fileName?: string;
+  linkUrl?: string;
   createdAt: string;
 }
 
@@ -455,6 +456,7 @@ export default function DashboardPage() {
                   contentType={msg.contentType}
                   timestamp={msg.createdAt}
                   fileName={msg.fileName}
+                  linkUrl={msg.linkUrl}
                 />
               ))
             ) : (

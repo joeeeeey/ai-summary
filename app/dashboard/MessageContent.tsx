@@ -7,12 +7,20 @@ interface MessageContentProps {
   content: string;
   contentType: string;
   fileName?: string;
-  timestamp?: string; // Add timestamp prop
+  linkUrl?: string;
+  timestamp?: string;
 }
 
-export default function MessageContent({ senderType, content, contentType, timestamp, fileName }: MessageContentProps) {
+export default function MessageContent({ 
+  senderType, 
+  content, 
+  contentType, 
+  timestamp, 
+  fileName, 
+  linkUrl 
+}: MessageContentProps) {
   // Log props for debugging
-  console.log('MessageContent props:', { senderType, contentType, fileName });
+  console.log('MessageContent props:', { senderType, contentType, fileName, linkUrl });
   
   // Format timestamp if provided
   const formattedTime = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', {
@@ -119,6 +127,46 @@ export default function MessageContent({ senderType, content, contentType, times
           <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>PDF Document</div>
           <div style={{ fontSize: '0.85em', opacity: 0.9, wordBreak: 'break-all' }}>{displayFileName}</div>
         </div>
+      </div>
+    );
+  } else if (contentType === 'link') {
+    // Display for web link content
+    const displayUrl = linkUrl || 'Web Content';
+    console.log('Rendering link with URL:', displayUrl);
+    
+    renderedContent = (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{
+            display: 'inline-block',
+            width: '24px',
+            height: '24px',
+            backgroundColor: '#4285F4',
+            position: 'relative',
+            borderRadius: '50%',
+            marginRight: '10px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+          }}>
+            {/* Link icon */}
+            <div style={{
+              position: 'absolute',
+              top: '7px',
+              left: '7px',
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              border: '2px solid white',
+            }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 'bold', fontSize: '0.85em', opacity: 0.9, wordBreak: 'break-all' }}>
+              <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'white' }}>
+                {displayUrl}
+              </a>
+            </div>
+          </div>
+        </div>
+        <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     );
   } else if (senderType === 'assistant') {

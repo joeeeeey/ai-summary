@@ -60,7 +60,11 @@ interface MessageData {
   content: string;
   fileName?: string;
   fileSize?: number;
+  linkUrl?: string;
 }
+
+// URL validation regex
+const urlRegex = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
 
 // 1. Authentication helper
 async function authenticateUser(request: NextRequest) {
@@ -145,7 +149,56 @@ async function processPdfContent(file: File): Promise<{ content: string, fileNam
   }
 }
 
-// 5. Message creation helper
+// 5. New helper: Check if text is a URL
+function isValidUrl(text: string): boolean {
+  return urlRegex.test(text.trim());
+}
+
+// 6. New helper: Scrape web content
+async function scrapeWebContent(url: string): Promise<string> {
+  try {
+    console.log('Scraping content from URL:', url);
+    
+    // Ensure URL has protocol
+    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+    
+    // Fetch webpage content
+    const response = await fetch(fullUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AISummaryBot/1.0)'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    
+    // Simple text extraction - in a production environment, use a proper HTML parser
+    // This is a basic implementation that removes HTML tags and extracts text
+    let text = html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Limit content size
+    const maxLength = 10000;
+    if (text.length > maxLength) {
+      text = text.substring(0, maxLength) + '... (content truncated due to length)';
+    }
+    
+    console.log(`Scraped ${text.length} characters from ${url}`);
+    return text;
+  } catch (error) {
+    console.error('Web scraping error:', error);
+    throw new Error(`Failed to scrape web content: ${(error as Error).message}`);
+  }
+}
+
+// 7. Message creation helper (updated with URL handling)
 async function createMessageData(
   request: NextRequest,
   userId: number,
@@ -183,16 +236,49 @@ async function createMessageData(
     // Handle text input if present
     const text = formData.get('text') as string | null;
     if (text && text.trim() !== '') {
-      console.log('Processing text input:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-      userMessages.push({
-        threadId: thread.id,
-        userId,
-        senderType: 'user',
-        contentType: 'text',
-        content: text,
-        fileName: '',
-      });
-      console.log('Added text message to userMessages array');
+      const trimmedText = text.trim();
+      console.log('Processing text input:', trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''));
+      
+      // Check if the input is just a URL
+      if (isValidUrl(trimmedText) && trimmedText.split(/\s+/).length === 1) {
+        try {
+          // Process as link type
+          console.log('Detected URL input, processing as link');
+          const scrapedContent = await scrapeWebContent(trimmedText);
+          
+          userMessages.push({
+            threadId: thread.id,
+            userId,
+            senderType: 'user',
+            contentType: 'link',
+            content: scrapedContent,
+            linkUrl: trimmedText
+          });
+          console.log('Added link message with scraped content to userMessages array');
+        } catch (error) {
+          console.error('Failed to process URL:', error);
+          // Fallback to treating as regular text if URL processing fails
+          userMessages.push({
+            threadId: thread.id,
+            userId,
+            senderType: 'user',
+            contentType: 'text',
+            content: `${trimmedText} (Note: Failed to load URL content: ${(error as Error).message})`,
+            fileName: '',
+          });
+        }
+      } else {
+        // Process as regular text
+        userMessages.push({
+          threadId: thread.id,
+          userId,
+          senderType: 'user',
+          contentType: 'text',
+          content: trimmedText,
+          fileName: '',
+        });
+        console.log('Added text message to userMessages array');
+      }
     }
   } 
   // Handle legacy JSON request format
@@ -202,14 +288,45 @@ async function createMessageData(
       throw new Error('Content cannot be empty');
     }
     
-    userMessages.push({
-      threadId: thread.id,
-      userId,
-      senderType: 'user',
-      contentType: 'text',
-      content,
-      fileName: '',
-    });
+    const trimmedContent = content.trim();
+    
+    // Check if the input is just a URL in JSON format too
+    if (isValidUrl(trimmedContent) && trimmedContent.split(/\s+/).length === 1) {
+      try {
+        // Process as link type
+        console.log('Detected URL input in JSON, processing as link');
+        const scrapedContent = await scrapeWebContent(trimmedContent);
+        
+        userMessages.push({
+          threadId: thread.id,
+          userId,
+          senderType: 'user',
+          contentType: 'link',
+          content: scrapedContent,
+          linkUrl: trimmedContent
+        });
+      } catch (error) {
+        // Fallback to treating as regular text
+        userMessages.push({
+          threadId: thread.id,
+          userId,
+          senderType: 'user',
+          contentType: 'text',
+          content: `${trimmedContent} (Note: Failed to load URL content: ${(error as Error).message})`,
+          fileName: '',
+        });
+      }
+    } else {
+      // Regular text message
+      userMessages.push({
+        threadId: thread.id,
+        userId,
+        senderType: 'user',
+        contentType: 'text',
+        content: trimmedContent,
+        fileName: '',
+      });
+    }
   }
   
   if (userMessages.length === 0) {
@@ -220,13 +337,18 @@ async function createMessageData(
   return { userMessages };
 }
 
-// 6. Format messages for AI processing
+// 8. Format messages for AI processing
 function formatMessagesForAI(messages: any[]) {
   return messages.map(msg => {
     if (msg.contentType === 'pdf') {
       return {
         role: 'user',
         content: "Here is the PDF content:\n\n" + msg.content,
+      };
+    } else if (msg.contentType === 'link') {
+      return {
+        role: 'user',
+        content: `Here is content from the web page (${msg.linkUrl}):\n\n${msg.content}`,
       };
     } else {
       return {
@@ -237,7 +359,7 @@ function formatMessagesForAI(messages: any[]) {
   });
 }
 
-// 7. Generate AI response
+// 9. Generate AI response
 async function generateAIResponse(messages: any[]) {
   // Add the system prompt
   const messagesWithPrompt = [
