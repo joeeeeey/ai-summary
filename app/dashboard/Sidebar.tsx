@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Box, 
@@ -32,10 +32,6 @@ interface SidebarProps {
 export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: SidebarProps) {
   const router = useRouter();
   const theme = useTheme();
-
-  const handleNewConversation = () => {
-    router.push('/dashboard');
-  };
 
   return (
     <Paper 

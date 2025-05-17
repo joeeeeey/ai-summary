@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -21,18 +21,13 @@ import {
   FormControl,
   InputLabel,
   CircularProgress,
-  Divider,
   Chip,
   Pagination,
-  Button,
-  Stack,
-  TablePagination,
   Tooltip,
   Tabs,
   Tab
 } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
-import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 
 interface AnalyticsEvent {
@@ -41,7 +36,7 @@ interface AnalyticsEvent {
   userId: number | null;
   messageId: number | null;
   threadId: number | null;
-  properties: any;
+  properties: Record<string, unknown> | string;
   createdAt: string;
   user?: {
     id: number;
@@ -58,11 +53,6 @@ interface AnalyticsEvent {
 interface EventCount {
   eventType: string;
   count: number;
-}
-
-interface DailyData {
-  date: string;
-  [key: string]: string | number;
 }
 
 interface TokenUsageData {
@@ -89,25 +79,15 @@ interface PaginationData {
 }
 
 // Color palette for charts
-const eventColors: Record<string, string> = {
-  'summarize_success': '#4caf50',
-  'pdf_upload': '#2196f3',
-  'linkurl_analysis': '#ff9800',
-  'user_login': '#9c27b0',
-  'llm_token_usage': '#f44336',
-  'user_registration': '#3f51b5',
-  'thread_created': '#00bcd4',
-  'error_occurred': '#f44336'
-};
 
 // Helper function to parse event properties consistently
-const parseProperties = (event: AnalyticsEvent): any => {
+const parseProperties = (event: AnalyticsEvent): Record<string, unknown> => {
   if (!event.properties) return {};
   
   try {
     return typeof event.properties === 'string'
       ? JSON.parse(event.properties)
-      : event.properties;
+      : event.properties as Record<string, unknown>;
   } catch (e) {
     console.error('Error parsing event properties:', e);
     return {};
@@ -151,7 +131,7 @@ export default function AnalyticsPage() {
   const router = useRouter();
   const [tabValue, setTabValue] = useState<number>(0);
   const [timeRange, setTimeRange] = useState<number>(3);
-  const [eventTypes, setEventTypes] = useState<string[]>([]);
+  const [, setEventTypes] = useState<string[]>([]);
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
@@ -160,11 +140,36 @@ export default function AnalyticsPage() {
     totalPages: 0
   });
   const [summaryData, setSummaryData] = useState<EventCount[]>([]);
-  const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [tokenUsageData, setTokenUsageData] = useState<TokenUsageData[]>([]);
   const [userTokenUsage, setUserTokenUsage] = useState<UserTokenUsage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Function to fetch events with pagination
+  const fetchEvents = useCallback(async (page: number, eventType?: string) => {
+    try {
+      const targetEventType = eventType || (tabValue === 0 ? 'llm_token_usage' : 
+                            tabValue === 1 ? 'pdf_upload' : 
+                            tabValue === 2 ? 'linkurl_analysis' : 
+                            tabValue === 3 ? 'user_login' :
+                            tabValue === 4 ? 'error_occurred' : undefined);
+      
+      const eventsResponse = await fetch(`/api/analytics?type=events&days=${timeRange}&limit=10&page=${page}${targetEventType ? `&eventType=${targetEventType}` : ''}`);
+      if (!eventsResponse.ok) {
+        throw new Error('Failed to fetch events');
+      }
+      const eventsJson = await eventsResponse.json();
+      setEvents(eventsJson.data.events || []);
+      setPagination(eventsJson.data.pagination || {
+        page: 1,
+        limit: 10,
+        totalItems: 0,
+        totalPages: 0
+      });
+    } catch (err) {
+      console.error('Error fetching events with pagination:', err);
+    }
+  }, [tabValue, timeRange]);
 
   // Fetch analytics data based on selected time range and tab
   useEffect(() => {
@@ -219,10 +224,11 @@ export default function AnalyticsPage() {
         
       } catch (err) {
         console.error('Error fetching analytics:', err);
-        setError('Failed to load analytics data. Please try again.');
+        const errorMessage = 'Failed to load analytics data. Please try again.';
+        setError(errorMessage);
         
         // Check if unauthorized and redirect to login
-        if ((err as any).status === 401) {
+        if ((err as Error & { status?: number }).status === 401) {
           router.push('/login');
         }
       } finally {
@@ -231,33 +237,7 @@ export default function AnalyticsPage() {
     };
     
     fetchAnalytics();
-  }, [timeRange, tabValue, router]);
-
-  // Function to fetch events with pagination
-  const fetchEvents = async (page: number, eventType?: string) => {
-    try {
-      const targetEventType = eventType || (tabValue === 0 ? 'llm_token_usage' : 
-                            tabValue === 1 ? 'pdf_upload' : 
-                            tabValue === 2 ? 'linkurl_analysis' : 
-                            tabValue === 3 ? 'user_login' :
-                            tabValue === 4 ? 'error_occurred' : undefined);
-      
-      const eventsResponse = await fetch(`/api/analytics?type=events&days=${timeRange}&limit=10&page=${page}${targetEventType ? `&eventType=${targetEventType}` : ''}`);
-      if (!eventsResponse.ok) {
-        throw new Error('Failed to fetch events');
-      }
-      const eventsJson = await eventsResponse.json();
-      setEvents(eventsJson.data.events || []);
-      setPagination(eventsJson.data.pagination || {
-        page: 1,
-        limit: 10,
-        totalItems: 0,
-        totalPages: 0
-      });
-    } catch (err) {
-      console.error('Error fetching events with pagination:', err);
-    }
-  };
+  }, [timeRange, tabValue, router, fetchEvents]);
 
   // Format date for display
   const formatDate = (dateString: string) => {

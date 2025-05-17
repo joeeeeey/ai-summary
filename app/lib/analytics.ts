@@ -19,7 +19,7 @@ interface TrackEventProps {
   userId?: number;
   messageId?: number;
   threadId?: number;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
 }
 
 /**
@@ -68,16 +68,17 @@ export async function getAnalytics({
   limit?: number;
   page?: number;
 }) {
-  const where: Record<string, any> = {};
+  const where: Record<string, unknown> = {};
   
   if (eventType) {
     where.eventType = eventType;
   }
   
   if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = startDate;
-    if (endDate) where.createdAt.lte = endDate;
+    const createdAt: Record<string, Date> = {};
+    if (startDate) createdAt.gte = startDate;
+    if (endDate) createdAt.lte = endDate;
+    where.createdAt = createdAt;
   }
   
   // Calculate total count for pagination
@@ -159,7 +160,7 @@ export async function getTokenUsageStats(days = 30) {
   
   tokenEvents.forEach(event => {
     const date = event.createdAt.toISOString().split('T')[0];
-    const props = event.properties as any;
+    const props = event.properties as Record<string, unknown>;
     
     if (!dailyData[date]) {
       dailyData[date] = {
@@ -224,7 +225,7 @@ export async function getUserTokenUsage(days = 30) {
     if (!event.userId) return;
     
     const userId = event.userId;
-    const props = event.properties as any;
+    const props = event.properties as Record<string, unknown>;
     
     if (!userData[userId]) {
       userData[userId] = {

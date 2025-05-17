@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   Box,
@@ -10,21 +10,18 @@ import {
   IconButton,
   Paper,
   InputAdornment,
-  CircularProgress,
   useTheme,
   AppBar,
   Toolbar,
   Tooltip,
-  Divider
+  CircularProgress
 } from '@mui/material';
 import MessageContent from './MessageContent';
 import Sidebar from './Sidebar';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import LogoutIcon from '@mui/icons-material/Logout';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CloseIcon from '@mui/icons-material/Close';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 
 interface Thread {
   id: number;
@@ -42,7 +39,8 @@ interface Message {
   isPending?: boolean;
 }
 
-export default function DashboardPage() {
+// Wrapper component that uses searchParams
+function DashboardContent() {
   const router = useRouter();
   const theme = useTheme();
   const pathname = usePathname();
@@ -469,5 +467,18 @@ export default function DashboardPage() {
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// Main dashboard component with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }

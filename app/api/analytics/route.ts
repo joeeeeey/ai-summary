@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       case 'events':
       default:
         data = await getAnalytics({
-          eventType: eventType as any,
+          eventType: eventType as string | undefined,
           startDate,
           limit,
           page
@@ -72,11 +72,11 @@ export async function GET(request: NextRequest) {
     }
     
     return NextResponse.json({ data });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Analytics API error:', error);
     
-    const status = error.status || 500;
-    const message = error.message || 'Internal Server Error';
+    const status = (error as { status?: number })?.status || 500;
+    const message = (error as { message?: string })?.message || 'Internal Server Error';
     
     return NextResponse.json({ error: message }, { status });
   }

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   // Create a response that clears the token cookie
   const response = NextResponse.json({ message: 'Logged out successfully' });
   

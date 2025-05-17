@@ -140,7 +140,7 @@ export default function LoginPage() {
                 onClick={() => router.push('/register')}
                 sx={{ color: theme.palette.primary.main }}
               >
-                Don't have an account? Register
+                Don&apos;t have an account? Register
               </Button>
             </Box>
           </Box>

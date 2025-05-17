@@ -234,8 +234,8 @@ async function scrapeWebContent(url: string): Promise<string> {
 async function createMessageData(
   request: NextRequest,
   userId: number,
-  thread: any,
-  requestBody: any,
+  thread: { id: number },
+  requestBody: { content?: string } | null,
   formData: FormData | null
 ): Promise<{ userMessages: MessageData[] }> {
   
@@ -395,7 +395,12 @@ async function createMessageData(
 }
 
 // 8. Format messages for AI processing
-function formatMessagesForAI(messages: any[]) {
+interface AIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+function formatMessagesForAI(messages: MessageData[]): AIMessage[] {
   return messages.map(msg => {
     if (msg.contentType === 'pdf') {
       return {
@@ -417,7 +422,7 @@ function formatMessagesForAI(messages: any[]) {
 }
 
 // 9. Generate AI response
-async function generateAIResponse(messages: any[]) {
+async function generateAIResponse(messages: AIMessage[]) {
   // Add the system prompt
   const messagesWithPrompt = [
     { role: "system", content: AI_SUMMARY_PROMPT },
@@ -427,7 +432,6 @@ async function generateAIResponse(messages: any[]) {
   try {
     const { text, usage, providerMetadata } = await generateText({
       model: openai('gpt-4o'),
-      // @ts-ignore - Type issue with the messages format
       messages: messagesWithPrompt,
     });
     
@@ -472,7 +476,7 @@ export async function POST(request: NextRequest) {
     const userId = await authenticateUser(request);
     
     // 2. Parse request
-    const { threadId, formData, requestBody, contentType } = await parseRequest(request);
+    const { threadId, formData, requestBody } = await parseRequest(request);
     
     // 3. Get or create thread
     const thread = await getOrCreateThread(userId, threadId);
