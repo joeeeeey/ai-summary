@@ -14,8 +14,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     const userId = decoded.userId;
     
-    // 确保 params 是已解析的
-    const threadId = parseInt(params?.id || '0');
+    // 需要先await params
+    const resolvedParams = await params;
+    const threadId = parseInt(resolvedParams?.id || '0');
     
     if (isNaN(threadId) || threadId <= 0) {
       return NextResponse.json({ error: 'Invalid thread ID' }, { status: 400 });
