@@ -5,6 +5,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
+cp env.template .env.local
+
 npm run dev
 # or
 yarn dev
@@ -46,5 +48,6 @@ CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 npx prisma init --datasource-provider mysql
 npx prisma migrate dev --name init
 npx prisma migrate dev --name add_thread_and_message
+npx prisma migrate dev --name add_linkText_to_message
 # npx prisma generate
 ```
