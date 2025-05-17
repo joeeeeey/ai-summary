@@ -1,21 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import fs from 'fs';
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
+import pdfParse from 'pdf-parse';
 
 const prisma = new PrismaClient();
 
-// const result = streamText({
-//   model: openai('gpt-4-turbo'),
-//   system: 'You are a helpful assistant.',
-//   messages,
-// });
 
-// generateText: Generates text for a given prompt and model.
-// streamText: Streams text from a given prompt and model.
+async function getMessageBody(request: NextRequest, userId: number, thread: any, request_body: any, formData: any) {
+  const contentType = request.headers.get('content-type') || '';
 
+  if (contentType.includes('multipart/form-data')) {
+    // 处理 PDF 上传
+    // const formData = await request.formData();
+    const file = formData.get('file') as File;
+    if (!file || file.type !== 'application/pdf') {
+      throw new Error('Invalid file type.');
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const pdfData = await pdfParse(buffer);
+    const content = pdfData.text;
+    return {
+      data: {
+        threadId: thread.id,
+        userId,
+        senderType: 'user',
+        contentType: 'pdf',
+        content, // PDF 解析后的文本
+        fileName: file.name,
+      },
+    };
+  } else {
+    // 处理文本消息
+    // const request_body = await request.json();
+    const { content } = request_body;
+    if (!content || content.trim() === '') {
+      throw new Error('Content cannot be empty.');
+    }
+    return {
+      data: {
+        threadId: thread.id,
+        userId,
+        senderType: 'user',
+        contentType: 'text',
+        content,
+      },
+    };
+  }
+}
 
 // handle message create, it is the core function, currently we only get a stub
 export async function POST(request: NextRequest) {
@@ -27,19 +61,26 @@ export async function POST(request: NextRequest) {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     const userId = decoded.userId;
+    // 先判断 threadId
+    let thread;
+    let threadId: number | undefined;
 
-    const request_body = await request.json()
-    console.log('request_body: ', request_body);
-    const { content } = request_body;
+    let request_body;
+    let formData
 
-    if (!content || content.trim() === '') {
-      return NextResponse.json({ error: 'Content cannot be empty.' }, { status: 400 });
+
+    // 先判断 content-type
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      formData = await request.formData();
+      console.log('formData: ', formData);
+      threadId = formData.get('threadId') ? Number(formData.get('threadId')) : undefined;
+      console.log('threadId: ', threadId);
+    } else {
+      request_body = await request.json();
+      threadId = request_body.threadId;
     }
 
-    // 检查是否有线程ID，如果没有，则创建新线程
-    const { threadId } = request_body;
-
-    let thread;
 
     if (threadId) {
       // 检查线程是否属于当前用户
@@ -62,39 +103,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const message_body = await getMessageBody(request, userId, thread, request_body, formData);
+
     // 创建新消息
-    const message = await prisma.message.create({
-      data: {
-        threadId: thread.id,
-        userId,
-        senderType: 'user',
-        contentType: 'text', // should be check by another method, it could be pdf
-        content,
-      },
-    });
+    await prisma.message.create(message_body);
 
-    /**
-     * 
-     * [{
-        role: 'user',
-        content: [
-          {
-            type: 'file',
-            data: fs.readFileSync('./data/ai.pdf'),
-            mimeType: 'application/pdf',
-            filename: 'ai.pdf', // optional
-          },
-        ],
-      },
-      {
-        "role": "assistant",
-        "content": "Hello! How can I assist you today?"
-      },
-      ]
-     * 
-     */
-
-    // messages = []
     // Fetch all messages from the current thread and sort by createdAt
     const allMessages = await prisma.message.findMany({
       where: {
@@ -109,17 +122,10 @@ export async function POST(request: NextRequest) {
     const messages = allMessages.map((msg) => {
       if (msg.contentType === 'pdf') {
         // Assuming you have a way to read the file content, e.g., from a file system or a storage service
-        const fileData = fs.readFileSync(`./data/${msg.content}`); // Adjust the path as needed
+        // const fileData = fs.readFileSync(`./data/${msg.content}`); // Adjust the path as needed
         return {
-          role: msg.senderType === 'user' ? 'user' : 'assistant',
-          content: [
-            {
-              type: 'file',
-              data: fileData,
-              mimeType: 'application/pdf',
-              filename: msg.content, // Assuming the content field stores the filename
-            },
-          ],
+          role: 'user',
+          content: "Here is the PDF content:\n\n" + msg.content,
         };
       } else {
         return {
