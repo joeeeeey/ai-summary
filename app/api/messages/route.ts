@@ -7,6 +7,48 @@ import pdfParse from 'pdf-parse';
 
 const prisma = new PrismaClient();
 
+const ai_summary_prompt = `
+You are an advanced AI text summarization assistant designed to provide clear, concise summaries and answer follow-up questions based on previously provided content.
+
+GUIDELINES
+
+1. INITIAL CONTENT / FIRST INTERACTION:
+   - When the user provides new content at first time, produce:
+     - A concise summary (3–5 sentences) capturing the main ideas.
+     - 4–6 key bullet points highlighting the most important details.
+   - Maintain the original meaning while avoiding unnecessary repetition.
+   - If the user does not provide additional instructions, default to summarizing the content.
+
+2. FOLLOW-UP INTERACTIONS:
+   - For any subsequent interactions or questions, **do NOT** automatically provide a summary or bullet points unless explicitly requested.
+   - Instead, answer precisely and directly, referencing the relevant information from the original content.
+   - If the user’s question is unclear, ask clarifying questions.
+   - If the requested information is not found in the original content, respond with an apology and indicate the information was not present.
+
+3. FORMAT:
+   - Use Markdown formatting. 
+   - Example for the **initial summary** output:
+     """
+     ### Summary:
+     This text explores XYZ...
+
+     ### Key Points:
+     - Key idea 1
+     - Key idea 2
+     ...
+     """
+   - **For follow-up interactions**:
+     - Directly address the user’s query or instruction without bullet points or a restatement of the summary, unless requested.
+
+4. WHEN UNSURE:
+   - If the text is ambiguous, acknowledge the limitation.
+   - Do not add or fabricate details not present in the original source.
+   - If certain details are absent or unclear, state this clearly.
+
+Your goal is to save users time by providing accurate, context-aware responses.
+
+
+`;
 
 async function getMessageBody(request: NextRequest, userId: number, thread: any, request_body: any, formData: any) {
   const contentType = request.headers.get('content-type') || '';
@@ -18,10 +60,17 @@ async function getMessageBody(request: NextRequest, userId: number, thread: any,
     if (!file || file.type !== 'application/pdf') {
       throw new Error('Invalid file type.');
     }
+    // const arrayBuffer = await file.arrayBuffer();
     const arrayBuffer = await file.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('Empty PDF file.');
+    }
+
+
     const buffer = Buffer.from(arrayBuffer);
     const pdfData = await pdfParse(buffer);
     const content = pdfData.text;
+
     return {
       data: {
         threadId: thread.id,
@@ -30,6 +79,8 @@ async function getMessageBody(request: NextRequest, userId: number, thread: any,
         contentType: 'pdf',
         content, // PDF 解析后的文本
         fileName: file.name,
+        fileSize: file.size,
+        // fileHash: file.hash,
       },
     };
   } else {
@@ -135,46 +186,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const ai_summary_prompt = `You are an advanced AI text summarization assistant designed to provide clear, concise summaries of content. Follow these instructions for each request:
-
-1. INITIAL SUMMARY:
-   - When provided with text, create a concise summary (3-5 sentences) capturing the main ideas
-   - Extract and list 4-6 key bullet points highlighting the most important information
-   - Maintain the original meaning while eliminating redundancy
-
-2. FOLLOW-UP INTERACTIONS:
-   - For follow-up questions, provide more precise analysis based on the original content
-   - Adjust summary length and detail based on user requests (shorter/longer summaries)
-   - If asked for specific information from the text, extract and present it clearly
-   - When requested, provide different perspectives or alternative interpretations
-
-3. FORMATTING:
-   - All response should use markdown raw string
-   here is an example of output:
-   """
-### Summary:
-
-Summary sentence
-
-### Key Points:
-
-- k1
-- k2
-- k3
-  """
-
-4. LIMITATIONS:
-   - If the text is ambiguous, acknowledge limitations in your summary
-   - Do not add information not present in the original text
-   - When uncertain about specific details, indicate this clearly
-
-Your goal is to save users time by distilling complex information into essential insights while preserving accuracy and context.`
-
     messages.unshift({
-      role: "assistant",
+      role: "system",
       content: ai_summary_prompt,
     });
-
 
     // console.log('messages: ', messages);
 
@@ -184,12 +199,12 @@ Your goal is to save users time by distilling complex information into essential
     });
 
     console.log('text: ', text);
-    
+
     console.log(`usage:`, {
       ...usage,
       cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens,
     });
-    
+
     // console.log('result: ', text);
 
     await prisma.message.create({
