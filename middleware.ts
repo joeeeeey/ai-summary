@@ -17,23 +17,18 @@ export async function middleware(request: NextRequest) {
   const guestRoutes = ['/login', '/register', '/'];
 
   // 检查 JWT
-  console.log('middle token: ', token);
   if (token) {
     try {
-      console.log('process.env.JWT_SECRET!: ', process.env.JWT_SECRET!);
-      
       const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
       await jwtVerify(token, secret);
       // jwt.verify(token, process.env.JWT_SECRET!);
 
       // 已登录用户访问登录或注册页，重定向到 /dashboard
       if (guestRoutes.includes(pathname)) {
-        console.log(111111);
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }
 
       // 继续请求
-      console.log('NextResponse: ', NextResponse);
       return NextResponse.next();
     } catch (error) {
       console.log('error: ', error);

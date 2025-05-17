@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
 
 const prisma = new PrismaClient();
+
+// const result = streamText({
+//   model: openai('gpt-4-turbo'),
+//   system: 'You are a helpful assistant.',
+//   messages,
+// });
+
+// generateText: Generates text for a given prompt and model.
+// streamText: Streams text from a given prompt and model.
+
 
 // handle message create, it is the core function, currently we only get a stub
 export async function POST(request: NextRequest) {
@@ -55,12 +68,134 @@ export async function POST(request: NextRequest) {
         threadId: thread.id,
         userId,
         senderType: 'user',
-        contentType: 'text', // should be check by another method
+        contentType: 'text', // should be check by another method, it could be pdf
         content,
       },
     });
 
-    // 暂时不调用 LLM，只返回成功响应
+    /**
+     * 
+     * [{
+        role: 'user',
+        content: [
+          {
+            type: 'file',
+            data: fs.readFileSync('./data/ai.pdf'),
+            mimeType: 'application/pdf',
+            filename: 'ai.pdf', // optional
+          },
+        ],
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today?"
+      },
+      ]
+     * 
+     */
+
+    // messages = []
+    // Fetch all messages from the current thread and sort by createdAt
+    const allMessages = await prisma.message.findMany({
+      where: {
+        threadId: thread.id,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    // Map the messages into the desired format
+    const messages = allMessages.map((msg) => {
+      if (msg.contentType === 'pdf') {
+        // Assuming you have a way to read the file content, e.g., from a file system or a storage service
+        const fileData = fs.readFileSync(`./data/${msg.content}`); // Adjust the path as needed
+        return {
+          role: msg.senderType === 'user' ? 'user' : 'assistant',
+          content: [
+            {
+              type: 'file',
+              data: fileData,
+              mimeType: 'application/pdf',
+              filename: msg.content, // Assuming the content field stores the filename
+            },
+          ],
+        };
+      } else {
+        return {
+          role: msg.senderType === 'user' ? 'user' : 'assistant',
+          content: msg.content,
+        };
+      }
+    });
+
+    const ai_summary_prompt = `You are an advanced AI text summarization assistant designed to provide clear, concise summaries of content. Follow these instructions for each request:
+
+1. INITIAL SUMMARY:
+   - When provided with text, create a concise summary (3-5 sentences) capturing the main ideas
+   - Extract and list 4-6 key bullet points highlighting the most important information
+   - Maintain the original meaning while eliminating redundancy
+
+2. FOLLOW-UP INTERACTIONS:
+   - For follow-up questions, provide more precise analysis based on the original content
+   - Adjust summary length and detail based on user requests (shorter/longer summaries)
+   - If asked for specific information from the text, extract and present it clearly
+   - When requested, provide different perspectives or alternative interpretations
+
+3. FORMATTING:
+   - All response should use markdown raw string
+   here is an example of output:
+   """
+### Summary:
+
+Summary sentence
+
+### Key Points:
+
+- k1
+- k2
+- k3
+  """
+
+4. LIMITATIONS:
+   - If the text is ambiguous, acknowledge limitations in your summary
+   - Do not add information not present in the original text
+   - When uncertain about specific details, indicate this clearly
+
+Your goal is to save users time by distilling complex information into essential insights while preserving accuracy and context.`
+
+    messages.unshift({
+      role: "assistant",
+      content: ai_summary_prompt,
+    });
+
+
+    // console.log('messages: ', messages);
+
+    const { text, usage, providerMetadata } = await generateText({
+      model: openai('gpt-4o'),
+      messages,
+    });
+
+    console.log('text: ', text);
+    
+    console.log(`usage:`, {
+      ...usage,
+      cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens,
+    });
+    
+    // console.log('result: ', text);
+
+    await prisma.message.create({
+      data: {
+        threadId: thread.id,
+        userId,
+        senderType: 'assistant',
+        contentType: 'text', // should be check by another method, it could be pdf
+        content: text,
+      },
+    });
+
     return NextResponse.json({ message: 'Message sent.', threadId: thread.id }, { status: 201 });
   } catch (error) {
     console.error('Error:', error);

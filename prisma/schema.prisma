@@ -47,7 +47,7 @@ model Message {
   userId      Int?
   senderType  String    //@db.Enum('user', 'LLM')
   contentType String    //@db.Enum('text', 'link', 'pdf', 'audio')
-  content     String
+  content     String    @db.Text // Change to Text to allow longer content
   fileName    String?
   fileSize    Int?
   filePath    String?

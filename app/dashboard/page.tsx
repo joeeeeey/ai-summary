@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import MessageContent from './MessageContent';
+
 
 interface Thread {
   id: number;
@@ -22,7 +24,6 @@ export default function DashboardPage() {
   const [input, setInput] = useState('');
 
   useEffect(() => {
-    console.log('useEffect: ');
     // 获取用户的线程列表
     const fetchThreads = async () => {
       const response = await fetch('/api/threads');
@@ -38,6 +39,7 @@ export default function DashboardPage() {
   }, [router]);
 
   const fetchMessages = async (threadId: number) => {
+    console.log('fetchMessages: ');
     const response = await fetch(`/api/threads/${threadId}/messages`);
     if (response.ok) {
       const data = await response.json();
@@ -111,10 +113,12 @@ export default function DashboardPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* 消息显示区域 */}
         <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+
           {selectedThreadId ? (
             messages.map((msg) => (
               <div key={msg.id} style={{ marginBottom: '10px' }}>
-                <strong>{msg.senderType === 'user' ? 'You' : 'Assistant'}:</strong> {msg.content}
+                <strong>{msg.senderType === 'user' ? 'You' : 'Assistant'}:</strong>
+                <MessageContent senderType={msg.senderType} content={msg.content} />
               </div>
             ))
           ) : (

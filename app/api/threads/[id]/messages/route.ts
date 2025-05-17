@@ -13,6 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     const userId = decoded.userId;
+    console.log('params.id: ', params.id);
     const threadId = parseInt(params.id);
 
     // 检查线程是否属于当前用户
