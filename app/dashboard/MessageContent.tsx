@@ -1,6 +1,15 @@
 // app/dashboard/MessageContent.tsx
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import { 
+  Box, 
+  Typography, 
+  Paper,
+  useTheme,
+  CircularProgress
+} from '@mui/material';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import LinkIcon from '@mui/icons-material/Link';
 
 interface MessageContentProps {
   senderType: string;
@@ -9,6 +18,7 @@ interface MessageContentProps {
   fileName?: string;
   linkUrl?: string;
   timestamp?: string;
+  isPending?: boolean;
 }
 
 export default function MessageContent({ 
@@ -17,10 +27,10 @@ export default function MessageContent({
   contentType, 
   timestamp, 
   fileName, 
-  linkUrl 
+  linkUrl,
+  isPending = false
 }: MessageContentProps) {
-  // Log props for debugging
-  console.log('MessageContent props:', { senderType, contentType, fileName, linkUrl });
+  const theme = useTheme();
   
   // Format timestamp if provided
   const formattedTime = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', {
@@ -31,157 +41,177 @@ export default function MessageContent({
 
   const isUser = senderType === 'user';
 
-  // Define styles based on sender type
-  const messageStyle = {
-    padding: '12px 16px',
-    borderRadius: '8px',
-    maxWidth: '80%',
-    marginBottom: '4px',
-    position: 'relative' as const,
-    color: 'white',
-    backgroundColor: isUser ? '#889ccf' : '#555b6e',
-    paddingBottom: '20px', // Add space for timestamp
-  };
-  
-  const timeStyle = {
-    fontSize: '0.7rem',
-    color: 'rgba(255, 255, 255, 0.7)',
-    position: 'absolute' as const,
-    right: '8px',
-    bottom: '4px',
-  };
-
-  const containerStyle = {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: isUser ? 'flex-end' : 'flex-start', // Reversed alignment
-    width: '100%',
-    marginBottom: '8px',
-  };
-
-  const labelStyle = {
-    fontSize: '0.8rem',
-    color: '#888',
-    marginBottom: '4px',
-  };
-
   // Render content based on type
   let renderedContent;
   
   if (contentType === 'pdf') {
     // Enhanced PDF display with icon and filename
     const displayFileName = fileName || 'PDF Document';
-    console.log('Rendering PDF with filename:', displayFileName);
     
     renderedContent = (
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{
-          display: 'inline-block',
-          width: '24px',
-          height: '28px',
-          backgroundColor: '#ff4d4d',
-          position: 'relative',
-          borderRadius: '2px',
-          marginRight: '10px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
-        }}>
-          {/* PDF icon white corner fold */}
-          <div style={{
-            position: 'absolute',
-            top: '0',
-            right: '0',
-            width: '0',
-            height: '0',
-            borderStyle: 'solid',
-            borderWidth: '6px',
-            borderColor: 'white transparent transparent white',
-          }} />
-          
-          {/* PDF text lines */}
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            left: '4px',
-            width: '16px',
-            height: '2px',
-            backgroundColor: 'white',
-          }} />
-          <div style={{
-            position: 'absolute',
-            top: '13px',
-            left: '4px',
-            width: '16px',
-            height: '2px',
-            backgroundColor: 'white',
-          }} />
-          <div style={{
-            position: 'absolute',
-            top: '18px',
-            left: '4px',
-            width: '12px',
-            height: '2px',
-            backgroundColor: 'white',
-          }} />
-        </div>
-        <div>
-          <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>PDF Document</div>
-          <div style={{ fontSize: '0.85em', opacity: 0.9, wordBreak: 'break-all' }}>{displayFileName}</div>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box 
+          sx={{ 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#ff4d4d',
+            color: 'white',
+            borderRadius: '4px',
+            p: 0.5,
+            mr: 1,
+          }}
+        >
+          <InsertDriveFileIcon />
+        </Box>
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+            PDF Document
+          </Typography>
+          <Typography variant="body2" sx={{ opacity: 0.9, wordBreak: 'break-all' }}>
+            {displayFileName}
+          </Typography>
+        </Box>
+      </Box>
     );
   } else if (contentType === 'link') {
     // Display for web link content
     const displayUrl = linkUrl || 'Web Content';
-    console.log('Rendering link with URL:', displayUrl);
     
     renderedContent = (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-          <div style={{
-            display: 'inline-block',
-            width: '24px',
-            height: '24px',
-            backgroundColor: '#4285F4',
-            position: 'relative',
-            borderRadius: '50%',
-            marginRight: '10px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
-          }}>
-            {/* Link icon */}
-            <div style={{
-              position: 'absolute',
-              top: '7px',
-              left: '7px',
-              width: '10px',
-              height: '10px',
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+          <Box 
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.palette.primary.main,
+              color: 'white',
               borderRadius: '50%',
-              border: '2px solid white',
-            }} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 'bold', fontSize: '0.85em', opacity: 0.9, wordBreak: 'break-all' }}>
-              <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'white' }}>
-                {displayUrl}
-              </a>
-            </div>
-          </div>
-        </div>
-        <ReactMarkdown>{content}</ReactMarkdown>
-      </div>
+              p: 0.5,
+              mr: 1,
+            }}
+          >
+            <LinkIcon fontSize="small" />
+          </Box>
+          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+            <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'white' }}>
+              {displayUrl}
+            </a>
+          </Typography>
+        </Box>
+        <Box className="markdown-content">
+          <ReactMarkdown>{content}</ReactMarkdown>
+        </Box>
+      </Box>
     );
   } else if (senderType === 'assistant') {
-    renderedContent = <ReactMarkdown>{content}</ReactMarkdown>;
+    renderedContent = (
+      <Box className="markdown-content">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </Box>
+    );
   } else {
-    renderedContent = <span>{content}</span>;
+    renderedContent = <Typography variant="body1">{content}</Typography>;
   }
 
   return (
-    <div style={containerStyle}>
-      {!isUser && <div style={labelStyle}>ai-summary</div>}
-      <div style={messageStyle}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+        width: '100%',
+        mb: 2,
+      }}
+    >
+      {!isUser && (
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            color: 'text.secondary',
+            mb: 0.5,
+            ml: isUser ? 0 : 1,
+          }}
+        >
+          ai-summary
+        </Typography>
+      )}
+      
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          pb: 2.5, // Extra space for timestamp
+          maxWidth: '80%',
+          minWidth: '120px', // 添加最小宽度，确保有足够空间显示状态
+          borderRadius: 2,
+          position: 'relative',
+          backgroundColor: isUser ? theme.palette.primary.main : '#2D3748',
+          color: 'white',
+          opacity: isPending ? 0.7 : 1,
+          '.markdown-content a': {
+            color: isUser ? '#FFFFFF' : theme.palette.primary.light,
+          },
+          '.markdown-content pre': {
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            padding: 1,
+            borderRadius: 1,
+            overflowX: 'auto',
+          },
+          '.markdown-content code': {
+            backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            padding: '2px 4px',
+            borderRadius: '3px',
+            fontFamily: 'monospace',
+          },
+        }}
+      >
         {renderedContent}
-        {formattedTime && <span style={timeStyle}>{formattedTime}</span>}
-      </div>
-    </div>
+        
+        {isPending ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              right: 8,
+              bottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '0.7rem',
+              maxWidth: '100px', // 限制状态指示器的最大宽度
+            }}
+          >
+            <CircularProgress size={10} color="inherit" />
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                fontSize: '0.7rem',
+                whiteSpace: 'nowrap', // 防止文本换行
+              }}
+            >
+              发送中...
+            </Typography>
+          </Box>
+        ) : (
+          formattedTime && (
+            <Typography 
+              variant="caption" 
+              sx={{
+                position: 'absolute',
+                right: 8,
+                bottom: 4,
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.7rem',
+              }}
+            >
+              {formattedTime}
+            </Typography>
+          )
+        )}
+      </Paper>
+    </Box>
   );
 }

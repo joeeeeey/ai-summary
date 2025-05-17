@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { 
+  Box, 
+  Typography, 
+  List, 
+  ListItemButton, 
+  ListItemText,
+  Button, 
+  Paper,
+  Divider,
+  useTheme
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 
 interface Thread {
   id: number;
@@ -13,76 +25,90 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: SidebarProps) {
-  const [hoveredThreadId, setHoveredThreadId] = useState<number | null>(null);
   const router = useRouter();
+  const theme = useTheme();
 
   const handleNewConversation = () => {
     router.push('/dashboard');
   };
 
   return (
-    <div style={{ 
-      width: '250px', 
-      borderRight: '1px solid #ccc', 
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
+    <Paper 
+      elevation={0} 
+      sx={{ 
+        width: '280px',
+        borderRight: `1px solid ${theme.palette.divider}`,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: theme.palette.background.default,
+      }}
+    >
+      <Box sx={{ p: 2, pb: 1 }}>
+        <Typography variant="h6" fontWeight="500" color={theme.palette.primary.main}>
+          Conversations
+        </Typography>
+      </Box>
+      
+      <Divider />
+      
       {/* Thread list with scrolling */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto'
-      }}>
-        <h3 style={{ padding: '10px', margin: 0 }}>Threads</h3>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <List sx={{ p: 0 }}>
           {threads.map((thread) => (
-            <li
+            <ListItemButton
               key={thread.id}
+              selected={thread.id === selectedThreadId}
               onClick={() => onThreadSelect(thread.id)}
-              onMouseEnter={() => setHoveredThreadId(thread.id)}
-              onMouseLeave={() => setHoveredThreadId(null)}
-              style={{
-                padding: '10px',
-                cursor: 'pointer',
-                backgroundColor: 
-                  thread.id === selectedThreadId 
-                    ? '#889ccf' 
-                    : thread.id === hoveredThreadId 
-                      ? '#e9ecef' 
-                      : 'transparent',
-                color: thread.id === selectedThreadId ? 'white' : 'inherit',
-                borderBottom: '1px solid #eee',
-                transition: 'background-color 0.2s ease'
+              sx={{
+                py: 1.5,
+                borderRadius: '4px',
+                mx: 1,
+                mb: 0.5,
+                '&.Mui-selected': {
+                  backgroundColor: theme.palette.primary.main,
+                  color: 'white',
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.dark,
+                  }
+                },
+                '&:hover': {
+                  backgroundColor: theme.palette.action.hover,
+                }
               }}
             >
-              {thread.title}-{thread.id}
-            </li>
+              <ListItemText 
+                primary={thread.title} 
+                primaryTypographyProps={{ 
+                  noWrap: true,
+                  fontSize: '0.9rem',
+                }}
+              />
+            </ListItemButton>
           ))}
-        </ul>
-      </div>
+        </List>
+      </Box>
       
       {/* Action area at bottom */}
-      <div style={{ 
-        padding: '15px', 
-        borderTop: '1px solid #eee',
-        backgroundColor: '#f8f9fa'
-      }}>
-        <button 
+      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<AddIcon />}
           onClick={handleNewConversation}
-          style={{
-            width: '100%',
-            padding: '8px 0',
-            backgroundColor: '#889ccf',
+          sx={{
+            py: 1,
+            backgroundColor: theme.palette.primary.main,
             color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
+            textTransform: 'none',
+            '&:hover': {
+              backgroundColor: theme.palette.primary.dark,
+            }
           }}
         >
-          Start New Conversation
-        </button>
-      </div>
-    </div>
+          New Conversation
+        </Button>
+      </Box>
+    </Paper>
   );
 } 
