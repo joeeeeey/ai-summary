@@ -16,6 +16,9 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
+# Create directory for pdf-parse test files
+RUN mkdir -p test/data && echo "dummy data" > test/data/05-versions-space.pdf
+
 # Build the Next.js app
 RUN yarn build
 
@@ -58,20 +61,16 @@ COPY --chown=nextjs:nodejs --from=builder /app/public ./public
 COPY --chown=nextjs:nodejs --from=builder /app/.next/standalone ./
 COPY --chown=nextjs:nodejs --from=builder /app/.next/static ./.next/static
 COPY --chown=nextjs:nodejs --from=builder /app/prisma ./prisma
+# Copy pdf-parse test files
+COPY --chown=nextjs:nodejs --from=builder /app/test ./test
 
 # Expose the port that App Runner will use
 EXPOSE 8080
 
-# Set environment variables for logging with info level
+# Set minimal environment variables
 ENV PORT=8080
-ENV NODE_ENV=production 
-ENV DEBUG=express:router,*:info,*:error
-ENV NEXT_DEBUG=true
-ENV NEXT_TELEMETRY_DISABLED=1
-# Force binding to all interfaces
+ENV NODE_ENV=production
 ENV HOSTNAME="0.0.0.0"
-# Enable Node.js info logging
-ENV NODE_DEBUG=info
 
-# Start the application with complete logging
-CMD ["sh", "-c", "node server.js 2>&1 | tee -a /tmp/app.log"]
+# Start the application
+CMD ["node", "server.js"]

@@ -90,19 +90,11 @@ docker push $(terraform output -raw ecr_repository_url):latest
 If you've updated your Docker image and need to redeploy:
 
 ```bash
-# Using the AWS CLI
+# redeploy
 aws apprunner start-deployment --service-arn arn:aws:apprunner:ap-southeast-1:922446598046:service/ai-summary-app/29ea7e03880f49c5b2af67ce6f79df79
 
-
+# get ENV
 aws apprunner describe-service --service-arn arn:aws:apprunner:ap-southeast-1:922446598046:service/ai-summary-app/29ea7e03880f49c5b2af67ce6f79df79 --query 'Service.SourceConfiguration.ImageRepository.ImageConfiguration.RuntimeEnvironmentVariables'
-
-
-# aws logs get-log-events \
-#     --log-group-name "/aws/apprunner/<your-service-name>/<service-id>/application" \
-#     --log-stream-name <specific-log-stream-name> \ # You might need to list streams first or get the latest
-#     --start-from-head \
-#     --limit 10 # Or more
-
 ```
 
 ## Important Notes

@@ -44,15 +44,15 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-
 ```bash
-# ORM setup
-npx prisma init --datasource-provider mysql
 npx prisma generate
 
-npx prisma migrate dev --name init
-npx prisma migrate dev --name add_thread_and_message
-npx prisma migrate dev --name add_linkText_to_message
-npx prisma migrate dev --name remove_linkText_from_message
-# npx prisma generate
+# To validate your schema without making any changes:
+npx prisma validate
+
+# apply existing migrations without creating new ones, use:
+npx prisma migrate deploy
+
+# migration by prisma
+
 ```
