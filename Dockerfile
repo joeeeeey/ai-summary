@@ -1,5 +1,5 @@
 # Stage 1: Build environment
-FROM node:22.15.1-alpine AS builder
+FROM docker.m.daocloud.io/node:22.15.1-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -20,7 +20,7 @@ RUN npx prisma generate
 RUN yarn build
 
 # Stage 2: Production environment
-FROM node:22.15.1-alpine AS runner
+FROM docker.m.daocloud.io/node:22.15.1-alpine AS runner
 
 # Set working directory
 WORKDIR /app
