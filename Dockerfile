@@ -19,6 +19,11 @@ RUN npx prisma generate
 # Build the Next.js app
 RUN yarn build
 
+# Patch the standalone server.js to force 0.0.0.0
+# CAUTION: This is fragile and depends on the structure of server.js
+RUN sed -i "s/const hostname = process.env.HOSTNAME || '0.0.0.0'/const hostname = '0.0.0.0'/" .next/standalone/server.js || \
+    sed -i "s/hostname: process.env.HOSTNAME || '0.0.0.0'/hostname: '0.0.0.0'/" .next/standalone/server.js
+
 # Stage 2: Production environment
 FROM docker.m.daocloud.io/node:22.15.1-alpine AS runner
 
