@@ -80,7 +80,7 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
             >
               <ChatIcon sx={{ mr: 1 }} color={selectedThreadId === thread.id ? 'inherit' : 'action'} />
               <ListItemText 
-                primary={'thread' + thread.id} 
+                primary={thread.title} 
                 primaryTypographyProps={{ 
                   noWrap: true,
                   fontSize: '0.9rem',

@@ -20,6 +20,7 @@ GUIDELINES
      - 4–6 key bullet points highlighting the most important details.
    - Maintain the original meaning while avoiding unnecessary repetition.
    - If the user does not provide additional instructions, default to summarizing the content.
+   - judge the locale of the content and answer in the same language.
 
 2. FOLLOW-UP INTERACTIONS:
    - For any subsequent interactions or questions, **do NOT** automatically provide a summary or bullet points unless explicitly requested.
@@ -31,6 +32,8 @@ GUIDELINES
    - Use Markdown formatting. 
    - Example for the **initial summary** output:
      """
+The following is the summary for the [text/pdf/link] you provided:
+
 ### Summary:
      This text explores XYZ...
 
@@ -379,7 +382,8 @@ async function createMessageData(
       }
     } else {
       // Regular text message
-      userMessages.push({
+      // set this message at first position
+      userMessages.unshift({
         threadId: thread.id,
         userId,
         senderType: 'user',
@@ -487,7 +491,13 @@ export async function POST(request: NextRequest) {
     
     // 4. Create user message(s)
     const { userMessages } = await createMessageData(request, userId, thread, requestBody, formData);
-    
+    // update thread.title by the first message content and trim 5, and with '-' + thread.id
+    thread.title = userMessages[0].content.trim().substring(0, 20);
+    await prisma.thread.update({
+      where: { id: thread.id },
+      data: { title: thread.title },
+    });
+
     // Save all user messages
     const savedUserMessages = [];
     for (const messageData of userMessages) {

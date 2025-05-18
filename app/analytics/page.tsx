@@ -25,10 +25,12 @@ import {
   Pagination,
   Tooltip,
   Tabs,
-  Tab
+  Tab,
+  Button
 } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { BarChart } from '@mui/x-charts/BarChart';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 interface AnalyticsEvent {
   id: number;
@@ -411,9 +413,14 @@ export default function AnalyticsPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Analytics Dashboard
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">
+          Analytics Dashboard
+        </Typography>
+        <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={() => router.push('/')}>
+          Back to Home
+        </Button>
+      </Box>
       
       {/* Tabs Navigation */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
@@ -852,7 +859,6 @@ export default function AnalyticsPage() {
                 <TableCell>URL</TableCell>
                 <TableCell>Content Length</TableCell>
                 <TableCell>Thread ID</TableCell>
-                <TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -871,21 +877,6 @@ export default function AnalyticsPage() {
                     </TableCell>
                     <TableCell>{formatNumber(props.contentLength || 0)}</TableCell>
                     <TableCell>{event.threadId || 'N/A'}</TableCell>
-                    <TableCell>
-                      {props.success ? (
-                        <Chip 
-                          label="Success" 
-                          size="small"
-                          sx={{ bgcolor: '#4caf50', color: 'white' }}
-                        />
-                      ) : (
-                        <Chip 
-                          label="Failed" 
-                          size="small"
-                          sx={{ bgcolor: '#f44336', color: 'white' }}
-                        />
-                      )}
-                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -998,10 +989,6 @@ export default function AnalyticsPage() {
               <TableRow>
                 <TableCell>Date</TableCell>
                 <TableCell>User</TableCell>
-                <TableCell>IP Address</TableCell>
-                <TableCell>Device</TableCell>
-                <TableCell>Browser</TableCell>
-                <TableCell>Login Method</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1010,11 +997,7 @@ export default function AnalyticsPage() {
                 return (
                   <TableRow key={event.id}>
                     <TableCell>{formatDate(event.createdAt)}</TableCell>
-                    <TableCell>{event.user?.name || event.userId || 'Anonymous'}</TableCell>
-                    <TableCell>{props.ipAddress || 'Unknown'}</TableCell>
-                    <TableCell>{props.device || 'Unknown'}</TableCell>
-                    <TableCell>{props.browser || 'Unknown'}</TableCell>
-                    <TableCell>{props.method || 'Password'}</TableCell>
+                    <TableCell>{event.user?.email || event.userId || 'Anonymous'}</TableCell>
                   </TableRow>
                 );
               })}
@@ -1133,9 +1116,8 @@ export default function AnalyticsPage() {
                 <TableCell>Date</TableCell>
                 <TableCell>User</TableCell>
                 <TableCell>Error Type</TableCell>
-                <TableCell>Message</TableCell>
+                <TableCell>errorStatus</TableCell>
                 <TableCell>Location</TableCell>
-                <TableCell>Severity</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1149,22 +1131,11 @@ export default function AnalyticsPage() {
                     <TableCell>
                       <Tooltip title={props.message || 'Unknown'}>
                         <Typography noWrap sx={{ maxWidth: 250 }}>
-                          {props.message || 'Unknown'}
+                          {props.errorMessage || 'Unknown'}
                         </Typography>
                       </Tooltip>
                     </TableCell>
-                    <TableCell>{props.location || 'Unknown'}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={props.severity || 'Error'} 
-                        size="small"
-                        sx={{ 
-                          bgcolor: props.severity === 'Critical' ? '#f44336' : 
-                                  props.severity === 'Warning' ? '#ff9800' : '#bdbdbd',
-                          color: 'white' 
-                        }}
-                      />
-                    </TableCell>
+                    <TableCell>{props.errorStatus || 'Unknown'}</TableCell>
                   </TableRow>
                 );
               })}
