@@ -47,7 +47,7 @@ export default function RegisterPage() {
     if (!response.ok) {
       setError(data.error || 'Registration failed.');
     } else {
-      router.push('/login');
+      router.push('/');
     }
   };
 

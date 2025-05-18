@@ -148,7 +148,11 @@ async function processPdfContent(file: File): Promise<{ content: string, fileNam
     
     const buffer = Buffer.from(arrayBuffer);
     const pdfData = await pdfParse(buffer);
-    
+
+    const maxLength = 10000;
+    if (pdfData.text.length > maxLength) {
+      pdfData.text = pdfData.text.substring(0, maxLength) + '... (content truncated due to length)';
+    }
     return {
       content: pdfData.text,
       fileName: file.name,

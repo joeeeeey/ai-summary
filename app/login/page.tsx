@@ -19,29 +19,49 @@ export default function LoginPage() {
   const theme = useTheme();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    console.log('Login submission started');
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('Invalid email format.');
-      return;
-    }
+    try {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        setError('Invalid email format.');
+        setIsSubmitting(false);
+        return;
+      }
 
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
+      console.log('Making API request to /api/login');
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+        credentials: 'same-origin' // Ensure cookies are sent and received
+      });
 
-    const data = await response.json();
+      console.log('API response received:', response.status);
+      const data = await response.json();
+      console.log('Response data:', data);
 
-    if (!response.ok) {
-      setError(data.error || 'Login failed.');
-    } else {
-      router.push('/dashboard');
+      if (!response.ok) {
+        setError(data.error || 'Login failed.');
+      } else {
+        console.log('Login successful, redirecting to home');
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -92,7 +112,7 @@ export default function LoginPage() {
             </Alert>
           )}
           
-          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ width: '100%' }}>
             <TextField
               margin="normal"
               required
@@ -104,6 +124,7 @@ export default function LoginPage() {
               autoFocus
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              disabled={isSubmitting}
               sx={{ mb: 2 }}
             />
             <TextField
@@ -117,12 +138,14 @@ export default function LoginPage() {
               autoComplete="current-password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              disabled={isSubmitting}
               sx={{ mb: 3 }}
             />
             <Button
               type="submit"
               fullWidth
               variant="contained"
+              disabled={isSubmitting}
               sx={{
                 py: 1.5,
                 backgroundColor: theme.palette.primary.main,
@@ -131,13 +154,14 @@ export default function LoginPage() {
                 },
               }}
             >
-              Login
+              {isSubmitting ? 'Logging in...' : 'Login'}
             </Button>
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Button
                 variant="text"
                 size="small"
                 onClick={() => router.push('/register')}
+                disabled={isSubmitting}
                 sx={{ color: theme.palette.primary.main }}
               >
                 Don&apos;t have an account? Register

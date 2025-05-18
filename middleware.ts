@@ -7,48 +7,68 @@ import { jwtVerify } from 'jose';
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
+  const { pathname, search } = request.nextUrl;
 
-  const { pathname } = request.nextUrl;
+  // Redirect dashboard to home page
+  if (pathname === '/dashboard') {
+    const url = new URL('/', request.url);
+    // Copy all query parameters
+    if (search) {
+      url.search = search;
+    }
+    return NextResponse.redirect(url);
+  }
 
-  // 定义需要身份验证的受保护路由
-  const protectedRoutes = ['/dashboard', '/api/messages', '/api/threads'];
+  // Define protected routes that require authentication
+  const protectedRoutes = ['/', '/dashboard', '/api/messages', '/api/threads'];
 
-  // 路由需要未登录访问
-  const guestRoutes = ['/login', '/register', '/'];
+  // Routes that should be accessible without authentication
+  const guestRoutes = ['/login', '/register', '/api/login', '/api/register'];
 
-  // 检查 JWT
+  // Check if the current route is an auth-related API route that should always be accessible
+  if (pathname === '/api/login' || pathname === '/api/register') {
+    return NextResponse.next();
+  }
+
+  // Check JWT token
   if (token) {
     try {
       const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
       await jwtVerify(token, secret);
       // jwt.verify(token, process.env.JWT_SECRET!);
 
-      // 已登录用户访问登录或注册页，重定向到 /dashboard
+      // Redirect logged-in users from login/register to home page
       if (guestRoutes.includes(pathname)) {
-        return NextResponse.redirect(new URL('/dashboard', request.url));
+        return NextResponse.redirect(new URL('/', request.url));
       }
 
-      // 继续请求
+      // Continue with the request
       return NextResponse.next();
     } catch (error) {
       console.log('error: ', error);
-      // 无效的 JWT，清除 Cookie 并重定向到 /login
+      // Invalid JWT, clear cookie and redirect to login
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.set('token', '', { maxAge: -1 });
       return response;
     }
   } else {
-    // 未登录用户访问受保护的路由，重定向到 /login
-    if (protectedRoutes.some((route) => pathname.startsWith(route))) {
+    // For unauthenticated users:
+    // 1. Allow access to guest routes (login/register)
+    if (guestRoutes.includes(pathname)) {
+      return NextResponse.next();
+    }
+    
+    // 2. Redirect unauthenticated users trying to access protected routes to login
+    if (protectedRoutes.some((route) => pathname === route || pathname.startsWith(route))) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // 允许访问非保护路由
+    // Allow access to other non-protected routes
     return NextResponse.next();
   }
 }
 
-// 应用中间件的匹配器
+// Apply middleware to these routes
 export const config = {
-  matcher: ['/dashboard', '/api/:path*', '/login', '/register'],
+  matcher: ['/', '/dashboard', '/api/:path*', '/login', '/register'],
 };
