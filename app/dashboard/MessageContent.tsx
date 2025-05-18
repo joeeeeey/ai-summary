@@ -8,7 +8,8 @@ import {
   useTheme,
   CircularProgress,
   IconButton,
-  Tooltip
+  Tooltip,
+  useMediaQuery
 } from '@mui/material';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import LinkIcon from '@mui/icons-material/Link';
@@ -42,6 +43,7 @@ export default function MessageContent({
   onRetry
 }: MessageContentProps) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // Format timestamp if provided
   const formattedTime = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', {
@@ -81,13 +83,13 @@ export default function MessageContent({
             mr: 1,
           }}
         >
-          <InsertDriveFileIcon />
+          <InsertDriveFileIcon fontSize={isMobile ? "small" : "medium"} />
         </Box>
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5, fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>
             PDF Document
           </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.9, wordBreak: 'break-all' }}>
+          <Typography variant="body2" sx={{ opacity: 0.9, wordBreak: 'break-all', fontSize: { xs: '0.75rem', sm: '0.85rem' } }}>
             {displayFileName}
           </Typography>
         </Box>
@@ -112,9 +114,9 @@ export default function MessageContent({
               mr: 1,
             }}
           >
-            <LinkIcon fontSize="small" />
+            <LinkIcon fontSize={isMobile ? "small" : "medium"} />
           </Box>
-          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+          <Typography variant="body2" sx={{ wordBreak: 'break-all', fontSize: { xs: '0.75rem', sm: '0.85rem' } }}>
             <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'white' }}>
               {displayUrl}
             </a>
@@ -142,7 +144,7 @@ export default function MessageContent({
         flexDirection: 'column',
         alignItems: isUser ? 'flex-end' : 'flex-start',
         width: '100%',
-        mb: 2,
+        mb: { xs: 1, sm: 2 },
         position: 'relative',
       }}
     >
@@ -153,6 +155,7 @@ export default function MessageContent({
             color: 'text.secondary',
             mb: 0.5,
             ml: isUser ? 0 : 1,
+            fontSize: { xs: '0.65rem', sm: '0.75rem' }
           }}
         >
           ai-summary
@@ -162,29 +165,34 @@ export default function MessageContent({
       <Paper
         elevation={0}
         sx={{
-          p: 2,
-          pb: 2.5, // Extra space for timestamp
-          maxWidth: '80%',
-          minWidth: '120px',
+          p: { xs: 1.5, sm: 2 },
+          pb: { xs: 2, sm: 2.5 }, // Extra space for timestamp
+          maxWidth: { xs: '90%', sm: '80%' },
+          minWidth: { xs: '100px', sm: '120px' },
           borderRadius: 2,
           position: 'relative',
           backgroundColor: showRetry ? '#ff4d4d' : isUser ? theme.palette.primary.main : '#2D3748',
           color: 'white',
           opacity: isPending ? 0.7 : 1,
-          '.markdown-content a': {
-            color: isUser ? '#FFFFFF' : theme.palette.primary.light,
-          },
-          '.markdown-content pre': {
-            backgroundColor: 'rgba(0, 0, 0, 0.1)',
-            padding: 1,
-            borderRadius: 1,
-            overflowX: 'auto',
-          },
-          '.markdown-content code': {
-            backgroundColor: 'rgba(0, 0, 0, 0.1)',
-            padding: '2px 4px',
-            borderRadius: '3px',
-            fontFamily: 'monospace',
+          '.markdown-content': {
+            fontSize: { xs: '0.9rem', sm: '1rem' },
+            '& a': {
+              color: isUser ? '#FFFFFF' : theme.palette.primary.light,
+            },
+            '& pre': {
+              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+              padding: { xs: 0.75, sm: 1 },
+              borderRadius: 1,
+              overflowX: 'auto',
+              fontSize: { xs: '0.8rem', sm: '0.9rem' },
+            },
+            '& code': {
+              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+              padding: '2px 4px',
+              borderRadius: '3px',
+              fontFamily: 'monospace',
+              fontSize: { xs: '0.8rem', sm: '0.9rem' },
+            },
           },
         }}
       >
@@ -200,19 +208,18 @@ export default function MessageContent({
               alignItems: 'center',
               gap: 0.5,
               color: 'rgba(255, 255, 255, 0.7)',
-              fontSize: '0.7rem',
-              maxWidth: '100px',
+              fontSize: { xs: '0.65rem', sm: '0.7rem' },
             }}
           >
-            <CircularProgress size={10} color="inherit" />
+            <CircularProgress size={isMobile ? 8 : 10} color="inherit" />
             <Typography 
               variant="caption" 
               sx={{ 
-                fontSize: '0.7rem',
+                fontSize: { xs: '0.65rem', sm: '0.7rem' },
                 whiteSpace: 'nowrap',
               }}
             >
-              发送中...
+              Processing...
             </Typography>
           </Box>
         ) : (
@@ -224,7 +231,7 @@ export default function MessageContent({
                 right: 8,
                 bottom: 4,
                 color: 'rgba(255, 255, 255, 0.7)',
-                fontSize: '0.7rem',
+                fontSize: { xs: '0.65rem', sm: '0.7rem' },
               }}
             >
               {formattedTime}

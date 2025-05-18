@@ -1,47 +1,121 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Summary
+
+![AI Summary](https://via.placeholder.com/800x400?text=AI+Summary)
+
+## About the Project
+
+AI Summary is a powerful content analysis tool that leverages artificial intelligence to help users quickly extract meaning from various types of content. Whether you're analyzing PDFs, web articles, or engaging in follow-up conversations about the content, AI Summary provides intelligent, concise summaries and insights to save you time and enhance your understanding.
+
+Built with modern web technologies and deployed on scalable cloud infrastructure, AI Summary is designed for professionals, researchers, and anyone who needs to process large volumes of text efficiently.
+
+## Key Features
+
+### Content Processing
+- **Multiple Input Types**: Process PDFs, web links, and plain text content
+- **Smart Summarization**: Get concise, meaningful summaries of complex content
+- **Follow-up Questions**: Ask questions about the content for deeper understanding
+
+### User Experience
+- **Secure Authentication**: Email/password login with JWT-based security
+- **Error Resilience**: Automatic retry for failed AI processing requests
+- **Conversation History**: Access all your past summaries and conversations
+- **Responsive Design**: Optimized for both desktop and mobile experiences
+
+### Technical Capabilities
+- **Analytics Dashboard**: Track usage metrics and content processing statistics
+- **Cloud Deployment**: AWS App Runner configuration for seamless scaling
+- **Database Integration**: Structured data storage with MySQL/Prisma
+
+## Application Architecture
+
+### Tech Stack
+- **Frontend**: Next.js 14, React, Material UI
+- **Backend**: Next.js API Routes, Prisma ORM
+- **Database**: MySQL
+- **AI Processing**: OpenAI GPT-4o
+- **Authentication**: JWT-based auth with secure password hashing
+- **Deployment**: AWS App Runner, ECR, VPC, RDS
+- **Infrastructure as Code**: Terraform
+
+### System Design
+```
+┌─────────────┐     ┌────────────────┐     ┌───────────────┐
+│  Web Client │────▶│ Next.js Server │────▶│ OpenAI API    │
+└─────────────┘     └────────────────┘     └───────────────┘
+                           │                       
+                           ▼                       
+                    ┌────────────────┐     ┌───────────────┐
+                    │ Prisma ORM     │────▶│ MySQL Database│
+                    └────────────────┘     └───────────────┘
+```
+
+### User Flow
+1. User authenticates through secure login
+2. Uploads content (PDF, link, or text)
+3. AI processes the content and generates a summary
+4. User can ask follow-up questions about the content
+5. All conversations are saved for future reference
+6. Analytics track usage patterns and system performance
 
 ## Getting Started
 
+### Prerequisites
+- Node.js 18+ and npm/yarn
+- MySQL database
+- OpenAI API key
 
-`cp env.template .env.local`
+### Installation
 
-First, run the development server:
+1. Clone the repository
+```bash
+git clone https://github.com/yourusername/ai-summary.git
+cd ai-summary
+```
 
+2. Install dependencies
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Set up environment variables
+```bash
+cp env.template .env.local
+# Edit .env.local with your configuration
+```
+
+4. Set up the database
+```sql
+CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+5. Run Prisma migrations
+```bash
+npx prisma migrate deploy
+```
+
+6. Start the development server
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deployment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The project is configured for AWS deployment using Terraform:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd terraform
+terraform init
+terraform apply
+```
 
-## Learn More
+After deployment, you can trigger new deployments with:
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-
-### database setup
-```sql
-CREATE DATABASE ai_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```bash
+aws apprunner start-deployment --service-arn arn:aws:apprunner:ap-southeast-1:922446598046:service/ai-summary-app/29ea7e03880f49c5b2af67ce6f79df79
 ```
 
 ```bash
@@ -52,7 +126,4 @@ npx prisma validate
 
 # apply existing migrations without creating new ones, use:
 npx prisma migrate deploy
-
-# migration by prisma
-
 ```

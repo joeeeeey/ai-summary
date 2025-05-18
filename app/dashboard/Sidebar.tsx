@@ -4,18 +4,20 @@ import {
   Box, 
   Typography, 
   List, 
-  ListItem,
   ListItemButton, 
   ListItemIcon,
   ListItemText,
   Button, 
   Paper,
   Divider,
-  useTheme
+  useTheme,
+  useMediaQuery,
+  IconButton
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ChatIcon from '@mui/icons-material/Chat';
 import AnalyticsIcon from '@mui/icons-material/BarChart';
+import CloseIcon from '@mui/icons-material/Close';
 import Link from 'next/link';
 
 interface Thread {
@@ -27,11 +29,13 @@ interface SidebarProps {
   threads: Thread[];
   selectedThreadId: number | null;
   onThreadSelect: (threadId: number | null) => void;
+  onClose?: () => void; // Optional prop for mobile drawer close
 }
 
-export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: SidebarProps) {
+export default function Sidebar({ threads, selectedThreadId, onThreadSelect, onClose }: SidebarProps) {
   const router = useRouter();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
     <Paper 
@@ -45,10 +49,29 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
         bgcolor: theme.palette.background.default,
       }}
     >
-      <Box sx={{ p: 2, pb: 1 }}>
-        <Typography variant="h6" fontWeight="500" color={theme.palette.primary.main}>
+      <Box sx={{ 
+        p: 2, 
+        pb: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <Typography 
+          variant={isMobile ? "subtitle1" : "h6"} 
+          fontWeight="500" 
+          color={theme.palette.primary.main}
+        >
           Conversations
         </Typography>
+        {isMobile && onClose && (
+          <IconButton 
+            size="small" 
+            onClick={onClose}
+            sx={{ ml: 1 }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
       </Box>
       
       <Divider />
@@ -62,7 +85,7 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
               selected={selectedThreadId === thread.id}
               onClick={() => onThreadSelect(thread.id)}
               sx={{
-                py: 1.5,
+                py: isMobile ? 1 : 1.5,
                 borderRadius: '4px',
                 mx: 1,
                 mb: 0.5,
@@ -78,12 +101,16 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
                 }
               }}
             >
-              <ChatIcon sx={{ mr: 1 }} color={selectedThreadId === thread.id ? 'inherit' : 'action'} />
+              <ChatIcon 
+                sx={{ mr: 1 }} 
+                color={selectedThreadId === thread.id ? 'inherit' : 'action'} 
+                fontSize={isMobile ? "small" : "medium"}
+              />
               <ListItemText 
                 primary={thread.title} 
                 primaryTypographyProps={{ 
                   noWrap: true,
-                  fontSize: '0.9rem',
+                  fontSize: isMobile ? '0.85rem' : '0.9rem',
                 }}
               />
             </ListItemButton>
@@ -92,17 +119,18 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
       </Box>
       
       {/* Action area at bottom */}
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+      <Box sx={{ p: isMobile ? 1.5 : 2, borderTop: `1px solid ${theme.palette.divider}` }}>
         <Button
           fullWidth
           variant="contained"
-          startIcon={<AddIcon />}
+          startIcon={<AddIcon fontSize={isMobile ? "small" : "medium"} />}
           onClick={() => onThreadSelect(null)}
           sx={{
-            py: 1,
+            py: isMobile ? 0.75 : 1,
             backgroundColor: theme.palette.primary.main,
             color: 'white',
             textTransform: 'none',
+            fontSize: isMobile ? '0.85rem' : '0.9rem',
             '&:hover': {
               backgroundColor: theme.palette.primary.dark,
             }
@@ -113,23 +141,24 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect }: S
       </Box>
       
       <Divider />
-      <Box sx={{ p: 1 }}>
+      <Box sx={{ p: isMobile ? 0.75 : 1 }}>
         <Link href="/analytics" style={{ textDecoration: 'none', color: 'inherit' }}>
           <ListItemButton
             sx={{
               borderRadius: '4px',
+              py: isMobile ? 0.75 : 1,
               '&:hover': {
                 backgroundColor: theme.palette.action.hover,
               }
             }}
           >
             <ListItemIcon>
-              <AnalyticsIcon color="action" />
+              <AnalyticsIcon color="action" fontSize={isMobile ? "small" : "medium"} />
             </ListItemIcon>
             <ListItemText 
               primary="Analytics" 
               primaryTypographyProps={{ 
-                fontSize: '0.9rem',
+                fontSize: isMobile ? '0.85rem' : '0.9rem',
               }}
             />
           </ListItemButton>

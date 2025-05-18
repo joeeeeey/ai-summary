@@ -14,6 +14,8 @@ import {
   AppBar,
   Toolbar,
   Tooltip,
+  useMediaQuery,
+  Drawer
 } from '@mui/material';
 import MessageContent from './MessageContent';
 import Sidebar from './Sidebar';
@@ -21,6 +23,7 @@ import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CloseIcon from '@mui/icons-material/Close';
+import MenuIcon from '@mui/icons-material/Menu';
 
 interface Thread {
   id: number;
@@ -52,6 +55,14 @@ export default function DashboardContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Mobile sidebar state
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -239,17 +250,65 @@ export default function DashboardContent() {
     }
   };
 
+  const handleRetry = (messageId: number) => {
+    // Implement the logic to retry sending a message
+    console.log(`Retrying message with id: ${messageId}`);
+  };
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Sidebar */}
-      <Sidebar
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        onThreadSelect={handleThreadSelect}
-      />
+      {/* Sidebar - shown as permanent on desktop, as drawer on mobile */}
+      {isMobile ? (
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{
+            keepMounted: true, // Better open performance on mobile
+          }}
+          sx={{
+            '& .MuiDrawer-paper': { 
+              width: 280,
+              boxSizing: 'border-box',
+            },
+            display: { xs: 'block', sm: 'none' },
+          }}
+        >
+          <Sidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onThreadSelect={(threadId) => {
+              handleThreadSelect(threadId);
+              setMobileOpen(false); // Close drawer after selection on mobile
+            }}
+            onClose={handleDrawerToggle}
+          />
+        </Drawer>
+      ) : (
+        <Box
+          component="nav"
+          sx={{ 
+            width: { sm: 280 },
+            flexShrink: 0,
+            display: { xs: 'none', sm: 'block' } 
+          }}
+        >
+          <Sidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onThreadSelect={handleThreadSelect}
+          />
+        </Box>
+      )}
 
       {/* Main content area */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden'
+      }}>
         {/* Header */}
         <AppBar
           position="static"
@@ -261,9 +320,22 @@ export default function DashboardContent() {
           }}
         >
           <Toolbar>
-            <Typography variant="h6" sx={{ flexGrow: 1, color: theme.palette.text.primary }}>
-              {selectedThreadId ? `Chat #${selectedThreadId}` : 'New Chat'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+              {isMobile && (
+                <IconButton
+                  edge="start"
+                  color="primary"
+                  aria-label="open drawer"
+                  onClick={handleDrawerToggle}
+                  sx={{ mr: 2 }}
+                >
+                  <MenuIcon />
+                </IconButton>
+              )}
+              <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+                {selectedThreadId ? `Chat #${selectedThreadId}` : 'New Chat'}
+              </Typography>
+            </Box>
 
             <Tooltip title="Logout">
               <IconButton edge="end" onClick={handleLogout} color="inherit">
@@ -279,7 +351,7 @@ export default function DashboardContent() {
           sx={{
             flex: 1,
             overflowY: 'auto',
-            p: 2,
+            p: { xs: 1.5, sm: 2 },
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
@@ -289,8 +361,21 @@ export default function DashboardContent() {
           {messages.map((message) => (
             <MessageContent
               key={message.id}
-              message={message}
-              isMe={message.senderType === 'user'}
+              senderType={message.senderType}
+              content={message.content}
+              contentType={message.contentType}
+              fileName={message.fileName}
+              linkUrl={message.linkUrl}
+              timestamp={message.createdAt}
+              isPending={message.isPending}
+              threadId={selectedThreadId || undefined}
+              isLastUserMessage={
+                message.senderType === 'user' && 
+                message.id === [...messages]
+                  .filter(m => m.senderType === 'user')
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]?.id
+              }
+              onRetry={handleRetry}
             />
           ))}
           <div ref={messagesEndRef} />
@@ -301,7 +386,7 @@ export default function DashboardContent() {
           elevation={3}
           component="form"
           sx={{
-            p: 2,
+            p: { xs: 1.5, sm: 2 },
             display: 'flex',
             alignItems: 'center',
             gap: 1,

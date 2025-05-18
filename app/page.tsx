@@ -14,7 +14,9 @@ import {
   AppBar,
   Toolbar,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  useMediaQuery,
+  Drawer
 } from '@mui/material';
 import MessageContent from './dashboard/MessageContent';
 import Sidebar from './dashboard/Sidebar';
@@ -22,6 +24,7 @@ import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CloseIcon from '@mui/icons-material/Close';
+import MenuIcon from '@mui/icons-material/Menu';
 
 interface Thread {
   id: number;
@@ -56,6 +59,14 @@ function MainContent() {
   const [userName, setUserName] = useState('User');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Mobile sidebar state
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -363,17 +374,50 @@ function MainContent() {
   };
 
   return (
-    <Box sx={{
-      display: 'flex',
-      height: '100vh',
-      bgcolor: theme.palette.background.default
-    }}>
-      {/* Sidebar */}
-      <Sidebar
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        onThreadSelect={handleThreadSelect}
-      />
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Sidebar - shown as permanent on desktop, as drawer on mobile */}
+      {isMobile ? (
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{
+            keepMounted: true, // Better open performance on mobile
+          }}
+          sx={{
+            '& .MuiDrawer-paper': { 
+              width: 280,
+              boxSizing: 'border-box',
+            },
+            display: { xs: 'block', sm: 'none' },
+          }}
+        >
+          <Sidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onThreadSelect={(threadId) => {
+              handleThreadSelect(threadId);
+              setMobileOpen(false); // Close drawer after selection on mobile
+            }}
+            onClose={handleDrawerToggle}
+          />
+        </Drawer>
+      ) : (
+        <Box
+          component="nav"
+          sx={{ 
+            width: { sm: 280 },
+            flexShrink: 0,
+            display: { xs: 'none', sm: 'block' } 
+          }}
+        >
+          <Sidebar
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onThreadSelect={handleThreadSelect}
+          />
+        </Box>
+      )}
 
       {/* Main content area */}
       <Box sx={{
@@ -394,11 +438,24 @@ function MainContent() {
           }}
         >
           <Toolbar sx={{ justifyContent: 'space-between' }}>
-            <Typography variant="h6" color="primary" noWrap>
-              {selectedThreadId
-                ? threads.find(t => t.id === selectedThreadId)?.title || 'Conversation'
-                : 'New Conversation'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {isMobile && (
+                <IconButton
+                  color="primary"
+                  aria-label="open drawer"
+                  edge="start"
+                  onClick={handleDrawerToggle}
+                  sx={{ mr: 2 }}
+                >
+                  <MenuIcon />
+                </IconButton>
+              )}
+              <Typography variant="h6" color="primary" noWrap>
+                {selectedThreadId
+                  ? threads.find(t => t.id === selectedThreadId)?.title || 'Conversation'
+                  : 'New Conversation'}
+              </Typography>
+            </Box>
             <Tooltip title="Logout">
               <IconButton onClick={handleLogout} color="primary">
                 <LogoutIcon />
@@ -413,7 +470,7 @@ function MainContent() {
           sx={{
             flex: 1,
             overflowY: 'auto',
-            px: 4,
+            px: { xs: 2, md: 4 }, // Smaller padding on mobile
             py: 2,
             backgroundColor: theme.palette.background.default
           }}
@@ -470,7 +527,7 @@ function MainContent() {
 
         {/* Input area */}
         <Box sx={{
-          p: 2,
+          p: { xs: 1.5, sm: 2 }, // Smaller padding on mobile
           borderTop: `1px solid ${theme.palette.divider}`,
           backgroundColor: theme.palette.background.paper
         }}>
