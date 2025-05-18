@@ -16,13 +16,20 @@ import {
   Tooltip,
   CircularProgress,
   useMediaQuery,
-  Drawer
+  Drawer,
+  Menu,
+  MenuItem,
+  Avatar,
+  ListItemIcon,
+  Divider
 } from '@mui/material';
 import MessageContent from './dashboard/MessageContent';
 import Sidebar from './dashboard/Sidebar';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import LogoutIcon from '@mui/icons-material/Logout';
+import AnalyticsIcon from '@mui/icons-material/BarChart';
+import PersonIcon from '@mui/icons-material/Person';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuIcon from '@mui/icons-material/Menu';
 
@@ -44,7 +51,7 @@ interface Message {
 }
 
 // Wrapper component that uses searchParams
-function MainContent() {
+function MainContent(): React.ReactNode {
   const router = useRouter();
   const theme = useTheme();
   const pathname = usePathname();
@@ -63,6 +70,10 @@ function MainContent() {
   // Mobile sidebar state
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  
+  // Add state for user menu
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const openMenu = Boolean(anchorEl);
   
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -373,6 +384,19 @@ function MainContent() {
     }
   };
 
+  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  
+  const handleUserMenuClose = () => {
+    setAnchorEl(null);
+  };
+  
+  const handleAnalyticsClick = () => {
+    handleUserMenuClose();
+    router.push('/analytics');
+  };
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Sidebar - shown as permanent on desktop, as drawer on mobile */}
@@ -456,11 +480,76 @@ function MainContent() {
                   : 'New Conversation'}
               </Typography>
             </Box>
-            <Tooltip title="Logout">
-              <IconButton onClick={handleLogout} color="primary">
-                <LogoutIcon />
-              </IconButton>
-            </Tooltip>
+            
+            {/* User profile button and menu */}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Tooltip title="Account settings">
+                <Button
+                  onClick={handleUserMenuOpen}
+                  color="primary"
+                  sx={{ 
+                    textTransform: 'none',
+                    ml: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}
+                  endIcon={<PersonIcon />}
+                >
+                  {userName}
+                </Button>
+              </Tooltip>
+              
+              <Menu
+                anchorEl={anchorEl}
+                id="account-menu"
+                open={openMenu}
+                onClose={handleUserMenuClose}
+                onClick={handleUserMenuClose}
+                PaperProps={{
+                  elevation: 0,
+                  sx: {
+                    overflow: 'visible',
+                    filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+                    mt: 1.5,
+                    '& .MuiAvatar-root': {
+                      width: 32,
+                      height: 32,
+                      ml: -0.5,
+                      mr: 1,
+                    },
+                    '&:before': {
+                      content: '""',
+                      display: 'block',
+                      position: 'absolute',
+                      top: 0,
+                      right: 14,
+                      width: 10,
+                      height: 10,
+                      bgcolor: 'background.paper',
+                      transform: 'translateY(-50%) rotate(45deg)',
+                      zIndex: 0,
+                    },
+                  },
+                }}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+              >
+                <MenuItem onClick={handleAnalyticsClick}>
+                  <ListItemIcon>
+                    <AnalyticsIcon fontSize="small" />
+                  </ListItemIcon>
+                  Analytics
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={handleLogout}>
+                  <ListItemIcon>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              </Menu>
+            </Box>
           </Toolbar>
         </AppBar>
 

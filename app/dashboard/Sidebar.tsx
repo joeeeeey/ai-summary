@@ -16,9 +16,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ChatIcon from '@mui/icons-material/Chat';
-import AnalyticsIcon from '@mui/icons-material/BarChart';
 import CloseIcon from '@mui/icons-material/Close';
-import Link from 'next/link';
 
 interface Thread {
   id: number;
@@ -138,31 +136,6 @@ export default function Sidebar({ threads, selectedThreadId, onThreadSelect, onC
         >
           New Chat
         </Button>
-      </Box>
-      
-      <Divider />
-      <Box sx={{ p: isMobile ? 0.75 : 1 }}>
-        <Link href="/analytics" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <ListItemButton
-            sx={{
-              borderRadius: '4px',
-              py: isMobile ? 0.75 : 1,
-              '&:hover': {
-                backgroundColor: theme.palette.action.hover,
-              }
-            }}
-          >
-            <ListItemIcon>
-              <AnalyticsIcon color="action" fontSize={isMobile ? "small" : "medium"} />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Analytics" 
-              primaryTypographyProps={{ 
-                fontSize: isMobile ? '0.85rem' : '0.9rem',
-              }}
-            />
-          </ListItemButton>
-        </Link>
       </Box>
     </Paper>
   );
