@@ -63,6 +63,8 @@ ENV NODE_ENV=production
 ENV DEBUG=next:*,express:router
 ENV NEXT_DEBUG=true
 ENV NEXT_TELEMETRY_DISABLED=1
+# Force binding to all interfaces
+ENV HOSTNAME="0.0.0.0"
 
 # Start the application with focused logging
 CMD ["sh", "-c", "node server.js 2>&1 | tee -a /tmp/app.log"]
