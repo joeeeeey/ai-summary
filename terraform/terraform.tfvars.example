@@ -1,0 +1,18 @@
+# AWS Region
+aws_region = "ap-southeast-1"
+
+# ECR Repository
+ecr_repository_name = "ai-summary-app"
+
+# Database Configuration
+database_username = "root"
+database_password = "Jh3Jn" # Example only - use different password in real tfvars
+database_name     = "ai_summary"
+database_url = ""
+
+# Application Configuration
+application_name = "ai-summary-app"
+
+# Secrets
+jwt_secret     = "your_jwt_secret_key"
+openai_api_key = "sk-proj" 
