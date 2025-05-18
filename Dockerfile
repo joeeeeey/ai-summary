@@ -62,14 +62,16 @@ COPY --chown=nextjs:nodejs --from=builder /app/prisma ./prisma
 # Expose the port that App Runner will use
 EXPOSE 8080
 
-# Set environment variables for focused debugging
+# Set environment variables for logging with info level
 ENV PORT=8080
-ENV NODE_ENV=production
-ENV DEBUG=next:*,express:router
+ENV NODE_ENV=production 
+ENV DEBUG=express:router,*:info,*:error
 ENV NEXT_DEBUG=true
 ENV NEXT_TELEMETRY_DISABLED=1
 # Force binding to all interfaces
 ENV HOSTNAME="0.0.0.0"
+# Enable Node.js info logging
+ENV NODE_DEBUG=info
 
-# Start the application with focused logging
+# Start the application with complete logging
 CMD ["sh", "-c", "node server.js 2>&1 | tee -a /tmp/app.log"]
