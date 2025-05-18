@@ -14,6 +14,8 @@ push:
 	aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(ECR_REPOSITORY_URL)
 	docker push $(ECR_REPOSITORY_URL):latest
 
+update-docker-image: build docker-tag push
+
 fix-docker-networking:
 	mv ~/.docker/config.json ~/.docker/config.json.bak
 	echo '{"credsStore":"", "auths":{}}' > ~/.docker/config.json

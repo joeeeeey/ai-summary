@@ -1,7 +1,5 @@
 # AI Summary
 
-![AI Summary](https://via.placeholder.com/800x400?text=AI+Summary)
-
 ## About the Project
 
 AI Summary is a powerful content analysis tool that leverages artificial intelligence to help users quickly extract meaning from various types of content. Whether you're analyzing PDFs, web articles, or engaging in follow-up conversations about the content, AI Summary provides intelligent, concise summaries and insights to save you time and enhance your understanding.
@@ -12,12 +10,12 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 
 ### Content Processing
 - **Multiple Input Types**: Process PDFs, web links, and plain text content
-- **Smart Summarization**: Get concise, meaningful summaries of complex content
+- **Smart Summarization**: Get concise, meaningful summaries of complex content, key points extraction
 - **Follow-up Questions**: Ask questions about the content for deeper understanding
 
 ### User Experience
 - **Secure Authentication**: Email/password login with JWT-based security
-- **Error Resilience**: Automatic retry for failed AI processing requests
+- **Error Resilience**: Automatic/Manually retry for failed AI processing requests
 - **Conversation History**: Access all your past summaries and conversations
 - **Responsive Design**: Optimized for both desktop and mobile experiences
 
@@ -29,18 +27,18 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 ## Application Architecture
 
 ### Tech Stack
-- **Frontend**: Next.js 14, React, Material UI
+- **Frontend**: Next.js 14, React, Material UI, vercel/ai
 - **Backend**: Next.js API Routes, Prisma ORM
 - **Database**: MySQL
-- **AI Processing**: OpenAI GPT-4o
+- **AI Processing**: OpenAI API
 - **Authentication**: JWT-based auth with secure password hashing
-- **Deployment**: AWS App Runner, ECR, VPC, RDS
-- **Infrastructure as Code**: Terraform
+- **Cloud infrastructure**: AWS App Runner, ECR, RDS
+- **Automation Deployment**: Terraform & Makefile
 
 ### System Design
 ```
 ┌─────────────┐     ┌────────────────┐     ┌───────────────┐
-│  Web Client │────▶│ Next.js Server │────▶│ OpenAI API    │
+│  Web Client │────▶│ Next.js Server │────▶│ LLM API       │
 └─────────────┘     └────────────────┘     └───────────────┘
                            │                       
                            ▼                       
@@ -60,7 +58,7 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm/yarn
+- Node.js 22+ and npm/yarn
 - MySQL database
 - OpenAI API key
 
