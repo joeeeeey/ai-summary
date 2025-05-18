@@ -6,10 +6,13 @@ import {
   Typography, 
   Paper,
   useTheme,
-  CircularProgress
+  CircularProgress,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import LinkIcon from '@mui/icons-material/Link';
+import ReplayIcon from '@mui/icons-material/Replay';
 
 interface MessageContentProps {
   senderType: string;
@@ -19,6 +22,10 @@ interface MessageContentProps {
   linkUrl?: string;
   timestamp?: string;
   isPending?: boolean;
+  threadId?: number;
+  threadStatus?: string;
+  isLastUserMessage?: boolean;
+  onRetry?: (threadId: number) => void;
 }
 
 export default function MessageContent({ 
@@ -28,7 +35,11 @@ export default function MessageContent({
   timestamp, 
   fileName, 
   linkUrl,
-  isPending = false
+  isPending = false,
+  threadId,
+  threadStatus,
+  isLastUserMessage = false,
+  onRetry
 }: MessageContentProps) {
   const theme = useTheme();
   
@@ -40,6 +51,14 @@ export default function MessageContent({
   }) : '';
 
   const isUser = senderType === 'user';
+  const showRetry = isUser && isLastUserMessage && threadStatus === 'failed' && threadId && onRetry;
+  
+  // Handle retry click
+  const handleRetry = () => {
+    if (threadId && onRetry) {
+      onRetry(threadId);
+    }
+  };
 
   // Render content based on type
   let renderedContent;
@@ -124,6 +143,7 @@ export default function MessageContent({
         alignItems: isUser ? 'flex-end' : 'flex-start',
         width: '100%',
         mb: 2,
+        position: 'relative',
       }}
     >
       {!isUser && (
@@ -145,10 +165,10 @@ export default function MessageContent({
           p: 2,
           pb: 2.5, // Extra space for timestamp
           maxWidth: '80%',
-          minWidth: '120px', // 添加最小宽度，确保有足够空间显示状态
+          minWidth: '120px',
           borderRadius: 2,
           position: 'relative',
-          backgroundColor: isUser ? theme.palette.primary.main : '#2D3748',
+          backgroundColor: showRetry ? '#ff4d4d' : isUser ? theme.palette.primary.main : '#2D3748',
           color: 'white',
           opacity: isPending ? 0.7 : 1,
           '.markdown-content a': {
@@ -181,7 +201,7 @@ export default function MessageContent({
               gap: 0.5,
               color: 'rgba(255, 255, 255, 0.7)',
               fontSize: '0.7rem',
-              maxWidth: '100px', // 限制状态指示器的最大宽度
+              maxWidth: '100px',
             }}
           >
             <CircularProgress size={10} color="inherit" />
@@ -189,7 +209,7 @@ export default function MessageContent({
               variant="caption" 
               sx={{ 
                 fontSize: '0.7rem',
-                whiteSpace: 'nowrap', // 防止文本换行
+                whiteSpace: 'nowrap',
               }}
             >
               发送中...
@@ -212,6 +232,27 @@ export default function MessageContent({
           )
         )}
       </Paper>
+      
+      {/* Show retry button for failed threads */}
+      {showRetry && (
+        <Box sx={{ mt: 1 }}>
+          <Tooltip title="Retry AI generation">
+            <IconButton 
+              size="small" 
+              color="primary" 
+              onClick={handleRetry}
+              sx={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)'
+                }
+              }}
+            >
+              <ReplayIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
     </Box>
   );
 }

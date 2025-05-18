@@ -25,6 +25,7 @@ model Thread {
   title     String    @default("New Conversation")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  status    String    @default("success")  // Possible values: "success", "failed"
   messages  Message[]
   user      User      @relation("UserThreads", fields: [userId], references: [id])
 

@@ -408,7 +408,8 @@ interface AIMessage {
   content: string;
 }
 
-function formatMessagesForAI(messages: MessageData[]): AIMessage[] {
+// Update the function to handle Prisma Message type
+function formatMessagesForAI(messages: any[]): AIMessage[] {
   return messages.map(msg => {
     if (msg.contentType === 'pdf') {
       return {
@@ -429,8 +430,8 @@ function formatMessagesForAI(messages: MessageData[]): AIMessage[] {
   });
 }
 
-// 9. Generate AI response
-async function generateAIResponse(messages: AIMessage[]) {
+// Updated generateAIResponse to handle errors properly
+async function generateAIResponse(messages: AIMessage[], threadId: number, userId: number) {
   // Add the system prompt
   const messagesWithPrompt = [
     { role: "system", content: AI_SUMMARY_PROMPT },
@@ -438,9 +439,10 @@ async function generateAIResponse(messages: AIMessage[]) {
   ];
   
   try {
+    console.log('messages: ', messages);
     const { text, usage, providerMetadata } = await generateText({
       model: openai('gpt-4o'),
-      messages: messagesWithPrompt,
+      messages: messagesWithPrompt as any,
     });
     
     console.log('Usage:', {
@@ -451,6 +453,8 @@ async function generateAIResponse(messages: AIMessage[]) {
     // Track LLM token usage event
     await trackEvent({
       eventType: 'llm_token_usage',
+      userId,
+      threadId,
       properties: {
         promptTokens: usage?.promptTokens || 0,
         completionTokens: usage?.completionTokens || 0,
@@ -460,13 +464,27 @@ async function generateAIResponse(messages: AIMessage[]) {
       }
     });
     
+    // Update thread status to success
+    await prisma.thread.update({
+      where: { id: threadId },
+      data: { status: "success" }
+    });
+    
     return text;
   } catch (error) {
     console.error('AI generation error:', error);
     
+    // Update thread status to failed
+    await prisma.thread.update({
+      where: { id: threadId },
+      data: { status: "failed" }
+    });
+    
     // Track error event
     await trackEvent({
       eventType: 'error_occurred',
+      userId,
+      threadId,
       properties: {
         errorType: 'ai_generation',
         errorMessage: (error as Error).message
@@ -477,7 +495,110 @@ async function generateAIResponse(messages: AIMessage[]) {
   }
 }
 
-// Main handler
+// Add a new route for retry functionality
+export async function PUT(request: NextRequest) {
+  try {
+    // 1. Authenticate user
+    const userId = await authenticateUser(request);
+    
+    // 2. Get threadId from request
+    const { threadId } = await request.json();
+    
+    if (!threadId) {
+      return NextResponse.json({ error: 'Thread ID is required' }, { status: 400 });
+    }
+    
+    // 3. Verify the thread belongs to the user and has failed status
+    const thread = await prisma.thread.findFirst({
+      where: { 
+        id: threadId,
+        userId
+      },
+    });
+    
+    if (!thread) {
+      return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
+    }
+    
+    // 4. Get all messages in thread
+    const allMessages = await prisma.message.findMany({
+      where: { threadId: thread.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    
+    if (allMessages.length === 0) {
+      return NextResponse.json({ error: 'No messages found in this thread' }, { status: 400 });
+    }
+    
+    // 5. Check if the last message is from the assistant
+    // If yes, delete it since we're going to retry and generate a new response
+    const lastMessage = allMessages[allMessages.length - 1];
+    if (lastMessage.senderType === 'assistant') {
+      await prisma.message.delete({
+        where: { id: lastMessage.id }
+      });
+      
+      // Remove the last message from the array as well
+      allMessages.pop();
+    }
+    
+    // 6. Format messages for AI
+    const formattedMessages = formatMessagesForAI(allMessages);
+    
+    // 7. Generate AI response
+    const aiResponse = await generateAIResponse(formattedMessages, thread.id, userId);
+    
+    // 8. Save AI response
+    const aiMessage = await prisma.message.create({
+      data: {
+        threadId: thread.id,
+        userId,
+        senderType: 'assistant',
+        contentType: 'text',
+        content: aiResponse,
+      },
+    });
+    
+    // Track successful retry event
+    await trackEvent({
+      eventType: 'summarize_success',
+      userId,
+      threadId: thread.id,
+      messageId: aiMessage.id,
+      properties: {
+        messageType: allMessages[allMessages.length - 1]?.contentType || 'text',
+        responseLength: aiResponse.length,
+        isRetry: true
+      }
+    });
+    
+    return NextResponse.json({ 
+      message: 'Retry successful.', 
+      threadId: thread.id 
+    }, { status: 200 });
+    
+  } catch (error: any) {
+    console.error('Error during retry:', error);
+    
+    // Track error event
+    await trackEvent({
+      eventType: 'error_occurred',
+      properties: {
+        errorType: 'retry_api_error',
+        errorMessage: error.message || 'Unknown error',
+        errorStatus: error.status || 500
+      }
+    });
+    
+    // Structured error handling
+    const status = error.status || 500;
+    const message = error.message || 'Internal Server Error';
+    
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// Update the POST handler to use the updated generateAIResponse function and handle thread status
 export async function POST(request: NextRequest) {
   try {
     // 1. Authenticate user
@@ -515,35 +636,45 @@ export async function POST(request: NextRequest) {
     const formattedMessages = formatMessagesForAI(allMessages);
     
     // 7. Generate AI response
-    const aiResponse = await generateAIResponse(formattedMessages);
-    
-    // 8. Save AI response
-    const aiMessage = await prisma.message.create({
-      data: {
-        threadId: thread.id,
+    try {
+      const aiResponse = await generateAIResponse(formattedMessages, thread.id, userId);
+      
+      // 8. Save AI response
+      const aiMessage = await prisma.message.create({
+        data: {
+          threadId: thread.id,
+          userId,
+          senderType: 'assistant',
+          contentType: 'text',
+          content: aiResponse,
+        },
+      });
+      
+      // Track successful summary event
+      await trackEvent({
+        eventType: 'summarize_success',
         userId,
-        senderType: 'assistant',
-        contentType: 'text',
-        content: aiResponse,
-      },
-    });
-    
-    // Track successful summary event
-    await trackEvent({
-      eventType: 'summarize_success',
-      userId,
-      threadId: thread.id,
-      messageId: aiMessage.id,
-      properties: {
-        messageType: userMessages[0]?.contentType || 'text',
-        responseLength: aiResponse.length
-      }
-    });
-    
-    return NextResponse.json({ 
-      message: 'Message sent.', 
-      threadId: thread.id 
-    }, { status: 201 });
+        threadId: thread.id,
+        messageId: aiMessage.id,
+        properties: {
+          messageType: userMessages[0]?.contentType || 'text',
+          responseLength: aiResponse.length
+        }
+      });
+      
+      return NextResponse.json({ 
+        message: 'Message sent.', 
+        threadId: thread.id 
+      }, { status: 201 });
+    } catch (error) {
+      // If AI generation fails, we still return success but with a flag indicating failure
+      // The UI will show the retry button
+      return NextResponse.json({ 
+        message: 'Message sent but AI processing failed. You can retry.', 
+        threadId: thread.id,
+        aiError: true
+      }, { status: 201 });
+    }
     
   } catch (error: any) {
     console.error('Error:', error);

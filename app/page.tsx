@@ -26,6 +26,7 @@ import CloseIcon from '@mui/icons-material/Close';
 interface Thread {
   id: number;
   title: string;
+  status?: string;
 }
 
 interface Message {
@@ -253,8 +254,21 @@ function MainContent() {
             setThreads(threadsData.threads);
           }
         } else if (selectedThreadId) {
-          // 获取所有消息，包括新的AI响应
-          fetchMessages(selectedThreadId);
+          // If there was an AI processing error but the user message was saved
+          if (responseData.aiError) {
+            // Just fetch messages to show the user message without AI response
+            fetchMessages(selectedThreadId);
+            
+            // Refresh threads to get updated status
+            const threadsResponse = await fetch('/api/threads');
+            if (threadsResponse.ok) {
+              const threadsData = await threadsResponse.json();
+              setThreads(threadsData.threads);
+            }
+          } else {
+            // Get all messages including new AI response
+            fetchMessages(selectedThreadId);
+          }
         }
       } else {
         console.error('Error submitting message:', responseData.error);
@@ -282,6 +296,69 @@ function MainContent() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+    }
+  };
+
+  const handleRetry = async (threadId: number) => {
+    if (!threadId || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Show loading state by marking the last user message as pending
+      setMessages(prev => {
+        const lastUserMessageIndex = prev
+          .map((msg, index) => ({ ...msg, index }))
+          .filter(msg => msg.senderType === 'user')
+          .pop()?.index;
+        
+        if (lastUserMessageIndex !== undefined) {
+          return prev.map((msg, index) => 
+            index === lastUserMessageIndex ? { ...msg, isPending: true } : msg
+          );
+        }
+        return prev;
+      });
+      
+      // Call the retry API endpoint
+      const response = await fetch('/api/messages', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadId }),
+      });
+      
+      if (response.ok) {
+        // Refresh messages to get the new AI response
+        fetchMessages(threadId);
+        
+        // Also refresh threads to update status
+        const threadsResponse = await fetch('/api/threads');
+        if (threadsResponse.ok) {
+          const threadsData = await threadsResponse.json();
+          setThreads(threadsData.threads);
+        }
+      } else {
+        const data = await response.json();
+        console.error('Retry failed:', data.error);
+        alert(`Error: ${data.error || 'Failed to retry'}`);
+        
+        // Remove pending state
+        setMessages(prev => 
+          prev.map(msg => ({ ...msg, isPending: false }))
+        );
+      }
+    } catch (error) {
+      console.error('Error during retry:', error);
+      alert('An error occurred while retrying.');
+      
+      // Remove pending state
+      setMessages(prev => 
+        prev.map(msg => ({ ...msg, isPending: false }))
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -352,6 +429,15 @@ function MainContent() {
                 linkUrl={message.linkUrl}
                 timestamp={message.createdAt}
                 isPending={message.isPending}
+                threadId={selectedThreadId || undefined}
+                threadStatus={threads.find(t => t.id === selectedThreadId)?.status}
+                isLastUserMessage={
+                  message.senderType === 'user' && 
+                  message.id === [...messages]
+                    .filter(m => m.senderType === 'user')
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]?.id
+                }
+                onRetry={handleRetry}
               />
             ))
           ) : (
