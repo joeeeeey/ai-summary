@@ -57,8 +57,12 @@ COPY --chown=nextjs:nodejs --from=builder /app/prisma ./prisma
 # Expose the port that App Runner will use
 EXPOSE 8080
 
-# Create an environment variable to specify the port for Next.js
+# Set environment variables for focused debugging
 ENV PORT=8080
+ENV NODE_ENV=production
+ENV DEBUG=next:*,express:router
+ENV NEXT_DEBUG=true
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Start the application
-CMD ["node", "server.js"]
+# Start the application with focused logging
+CMD ["sh", "-c", "node server.js 2>&1 | tee -a /tmp/app.log"]
