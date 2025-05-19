@@ -42,25 +42,23 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 
 ### System Design
 ```
+                    ┌───────────────┐
+                    │ Vector Storage│
+                    │ (Pinecone)    │
+                    └───────────────┘
+                            ▲
+                            │
+                            │
+                            │
 ┌─────────────┐     ┌────────────────┐     ┌───────────────┐
-│  Web Client │────▶│ Next.js Server │────▶│ OpenAI API    │
+│  Web Client │────▶│ Next.js Server │────▶│ LLM API       │
 └─────────────┘     └────────────────┘     └───────────────┘
-                           │                       ▲
-                           │                       │
-                           ▼                       │
-                    ┌────────────────┐     ┌───────────────┐
-                    │ Prisma ORM     │     │ Vector Storage│
-                    └────────────────┘     │ (Pinecone)    │
-                           │               └───────────────┘
-                           ▼                       ▲
-                    ┌────────────────┐            │
-                    │ MySQL Database │            │
-                    └────────────────┘            │
-                                                  │
-                    ┌────────────────┐            │
-                    │ Document       │────────────┘
-                    │ Processing     │
-                    └────────────────┘
+                           │
+                           │
+                           ▼
+                    ┌────────────────┐    
+                    │ MySQL Database │    
+                    └────────────────┘    
 ```
 
 ### How It Works
