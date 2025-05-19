@@ -34,6 +34,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 interface Thread {
   id: number;
   title: string;
+  status?: string;
 }
 
 interface Message {
@@ -41,6 +42,8 @@ interface Message {
   senderType: string;
   content: string;
   contentType: string;
+  contentSummary?: string;
+  hasFullContent?: boolean;
   fileName?: string;
   linkUrl?: string;
   createdAt: string;
@@ -119,6 +122,9 @@ export default function DashboardContent() {
       setMessages([]);
     }
   }, [selectedThreadId]);
+
+  // Get current thread
+  const currentThread = threads.find(t => t.id === selectedThreadId);
 
   // Get user's thread list and user info
   useEffect(() => {
@@ -291,9 +297,40 @@ export default function DashboardContent() {
     }
   };
 
-  const handleRetry = (messageId: number) => {
-    // Implement the logic to retry sending a message
-    console.log(`Retrying message with id: ${messageId}`);
+  const handleRetry = async (threadId: number) => {
+    try {
+      // Show loading state
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.senderType === 'assistant' && prevMessages.indexOf(msg) === prevMessages.length - 1
+            ? { ...msg, isPending: true }
+            : msg
+        )
+      );
+
+      // Call the retry API endpoint
+      const response = await fetch('/api/messages', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to retry AI generation');
+      }
+
+      // Refresh messages to show the new AI response
+      fetchMessages(threadId);
+    } catch (error) {
+      console.error('Error retrying AI generation:', error);
+      // Reset pending state on error
+      setMessages(prevMessages => 
+        prevMessages.map(msg => ({ ...msg, isPending: false }))
+      );
+      alert('Failed to retry. Please try again.');
+    }
   };
 
   return (
@@ -462,11 +499,14 @@ export default function DashboardContent() {
               senderType={message.senderType}
               content={message.content}
               contentType={message.contentType}
+              contentSummary={message.contentSummary}
+              hasFullContent={message.hasFullContent}
               fileName={message.fileName}
               linkUrl={message.linkUrl}
               timestamp={message.createdAt}
               isPending={message.isPending}
               threadId={selectedThreadId || undefined}
+              threadStatus={currentThread?.status}
               isLastUserMessage={
                 message.senderType === 'user' && 
                 message.id === [...messages]

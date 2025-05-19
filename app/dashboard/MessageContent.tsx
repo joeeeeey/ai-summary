@@ -19,6 +19,8 @@ interface MessageContentProps {
   senderType: string;
   content: string;
   contentType: string;
+  contentSummary?: string;
+  hasFullContent?: boolean;
   fileName?: string;
   linkUrl?: string;
   timestamp?: string;
@@ -33,6 +35,8 @@ export default function MessageContent({
   senderType, 
   content, 
   contentType, 
+  contentSummary,
+  hasFullContent,
   timestamp, 
   fileName, 
   linkUrl,
@@ -70,28 +74,40 @@ export default function MessageContent({
     const displayFileName = fileName || 'PDF Document';
     
     renderedContent = (
-      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-        <Box 
-          sx={{ 
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#ff4d4d',
-            color: 'white',
-            borderRadius: '4px',
-            p: 0.5,
-            mr: 1,
-          }}
-        >
-          <InsertDriveFileIcon fontSize={isMobile ? "small" : "medium"} />
+      <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          <Box 
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#ff4d4d',
+              color: 'white',
+              borderRadius: '4px',
+              p: 0.5,
+              mr: 1,
+            }}
+          >
+            <InsertDriveFileIcon fontSize={isMobile ? "small" : "medium"} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5, fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>
+              PDF Document
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.9, wordBreak: 'break-all', fontSize: { xs: '0.75rem', sm: '0.85rem' } }}>
+              {displayFileName}
+            </Typography>
+          </Box>
         </Box>
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5, fontSize: { xs: '0.8rem', sm: '0.9rem' } }}>
-            PDF Document
+        
+        {hasFullContent && (
+          <Typography variant="caption" sx={{ mt: 1, color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+            Large document: showing summary. Full content available for search.
           </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.9, wordBreak: 'break-all', fontSize: { xs: '0.75rem', sm: '0.85rem' } }}>
-            {displayFileName}
-          </Typography>
+        )}
+        
+        <Box className="markdown-content" sx={{ width: '100%', mt: 1 }}>
+          <ReactMarkdown>{content}</ReactMarkdown>
         </Box>
       </Box>
     );
@@ -122,6 +138,13 @@ export default function MessageContent({
             </a>
           </Typography>
         </Box>
+        
+        {hasFullContent && (
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.75rem', fontStyle: 'italic' }}>
+            Large web content: showing summary. Full content available for search.
+          </Typography>
+        )}
+        
         <Box className="markdown-content">
           <ReactMarkdown>{content}</ReactMarkdown>
         </Box>

@@ -33,21 +33,26 @@ model Thread {
 }
 
 model Message {
-  id          Int      @id @default(autoincrement())
-  threadId    Int
-  userId      Int?
-  senderType  String
-  contentType String
-  content     String   @db.Text
-  fileName    String?
-  fileSize    Int?
-  filePath    String?
-  fileHash    String?
-  createdAt   DateTime @default(now())
-  linkUrl     String?
-  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  user        User?    @relation("UserMessages", fields: [userId], references: [id])
-  events      AnalyticsEvent[] @relation("MessageEvents")
+  id             Int      @id @default(autoincrement())
+  threadId       Int
+  userId         Int?
+  senderType     String
+  contentType    String
+  content        String   @db.Text
+  contentSummary String?  @db.Text
+  retrievedContext String? @db.Text
+  retrievalMessageId Int?  // ID of the message that provided the retrieval context
+  hasFullContent Boolean  @default(false)
+  summaryType    String?  // Type of summary: 'primary', 'background', 'reference', etc.
+  fileName       String?
+  fileSize       Int?
+  filePath       String?
+  fileHash       String?
+  createdAt      DateTime @default(now())
+  linkUrl        String?
+  thread         Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user           User?    @relation("UserMessages", fields: [userId], references: [id])
+  events         AnalyticsEvent[] @relation("MessageEvents")
 
   @@index([threadId], map: "Message_threadId_fkey")
   @@index([userId], map: "Message_userId_fkey")
