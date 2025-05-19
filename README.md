@@ -10,27 +10,32 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 
 ### Content Processing
 - **Multiple Input Types**: Process PDFs, web links, and plain text content
-- **Smart Summarization**: Get concise, meaningful summaries of complex content, key points extraction
-- **Follow-up Questions**: Ask questions about the content for deeper understanding
+- **Smart Summarization**: Get concise, meaningful summaries of complex content
+- **Follow-up Questions**: Ask detailed questions about the content with context-aware responses
+- **Vector Database Storage**: Store large documents for retrieval during follow-up questions
+- **Hybrid Approach**: Initial summaries use truncated text, follow-ups use vector retrieval
 
 ### User Experience
 - **Secure Authentication**: Email/password login with JWT-based security
-- **Error Resilience**: Automatic/Manually retry for failed AI processing requests
+- **Error Resilience**: Automatic/manual retry for failed AI processing requests
 - **Conversation History**: Access all your past summaries and conversations
 - **Responsive Design**: Optimized for both desktop and mobile experiences
+- **Contextual Retrieval**: Get answers from specific sections of large documents during follow-ups
 
 ### Technical Capabilities
 - **Analytics Dashboard**: Track usage metrics and content processing statistics
 - **Cloud Deployment**: AWS App Runner configuration for seamless scaling
-- **Database Integration**: Structured data storage with MySQL/Prisma
+- **Database Integration**: MySQL for conversations, Pinecone for vector storage
+- **Vector Search**: Semantic search for follow-up questions on large documents
+- **Chunking & Embedding**: Large documents are processed for efficient retrieval
 
 ## Application Architecture
 
 ### Tech Stack
 - **Frontend**: Next.js 14, React, Material UI, vercel/ai
 - **Backend**: Next.js API Routes, Prisma ORM
-- **Database**: MySQL
-- **AI Processing**: OpenAI API
+- **Database**: MySQL for structured data, Pinecone for vector storage
+- **AI Processing**: OpenAI API (GPT-4o for generation, text-embedding-ada-002 for embeddings)
 - **Authentication**: JWT-based auth with secure password hashing
 - **Cloud infrastructure**: AWS App Runner, ECR, RDS
 - **Automation Deployment**: Terraform & Makefile
@@ -38,22 +43,42 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 ### System Design
 ```
 ┌─────────────┐     ┌────────────────┐     ┌───────────────┐
-│  Web Client │────▶│ Next.js Server │────▶│ LLM API       │
+│  Web Client │────▶│ Next.js Server │────▶│ OpenAI API    │
 └─────────────┘     └────────────────┘     └───────────────┘
-                           │                       
-                           ▼                       
+                           │                       ▲
+                           │                       │
+                           ▼                       │
                     ┌────────────────┐     ┌───────────────┐
-                    │ Prisma ORM     │────▶│ MySQL Database│
-                    └────────────────┘     └───────────────┘
+                    │ Prisma ORM     │     │ Vector Storage│
+                    └────────────────┘     │ (Pinecone)    │
+                           │               └───────────────┘
+                           ▼                       ▲
+                    ┌────────────────┐            │
+                    │ MySQL Database │            │
+                    └────────────────┘            │
+                                                  │
+                    ┌────────────────┐            │
+                    │ Document       │────────────┘
+                    │ Processing     │
+                    └────────────────┘
 ```
 
-### User Flow
-1. User authenticates through secure login
-2. Uploads content (PDF, link, or text)
-3. AI processes the content and generates a summary
-4. User can ask follow-up questions about the content
-5. All conversations are saved for future reference
-6. Analytics track usage patterns and system performance
+### How It Works
+
+The application uses a hybrid approach to document processing:
+
+1. **Initial Processing**:
+   - For first-time summaries, documents (PDF/link/text) are truncated if too large
+   - A direct AI call is made to generate the initial summary
+   - In parallel, the full document is chunked and stored in the vector database
+
+2. **Follow-up Questions**:
+   - When users ask follow-up questions, the vector database is queried
+   - Relevant document chunks are retrieved based on semantic similarity
+   - These chunks are added to the context sent to the AI model
+   - The AI generates precise answers based on the retrieved content
+
+This approach balances speed (quick initial summaries) with accuracy (detailed follow-up responses).
 
 ## Getting Started
 
@@ -61,6 +86,7 @@ Built with modern web technologies and deployed on scalable cloud infrastructure
 - Node.js 22+ and npm/yarn
 - MySQL database
 - OpenAI API key
+- Pinecone API key (for vector database features)
 
 ### Installation
 
