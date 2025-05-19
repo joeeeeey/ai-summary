@@ -56,4 +56,5 @@ module "apprunner" {
   database_url          = var.database_url
   jwt_secret            = var.jwt_secret
   openai_api_key        = var.openai_api_key
+  pinecone_api_key      = var.pinecone_api_key
 } 

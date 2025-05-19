@@ -12,6 +12,8 @@ export type AnalyticsEventType =
   | 'llm_token_usage'      // Track token usage
   | 'user_registration'    // When a user registers
   | 'thread_created'       // When a new thread is created
+  | 'vector_storage'       // When content is stored in vector DB
+  | 'content_processing'   // When content is processed for summarization or retrieval
   | 'error_occurred';      // When an error occurs
 
 interface TrackEventProps {

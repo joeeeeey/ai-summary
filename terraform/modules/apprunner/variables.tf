@@ -1,26 +1,25 @@
 variable "application_name" {
-  description = "Name of the application"
+  description = "Name of the App Runner application"
   type        = string
 }
 
 variable "image_identifier" {
-  description = "ECR repository URL with image tag"
+  description = "ECR image URI"
   type        = string
-  default     = "ai-summary-app:latest"
 }
 
 variable "vpc_id" {
-  description = "The ID of the VPC"
+  description = "VPC ID"
   type        = string
 }
 
 variable "vpc_connector_subnets" {
-  description = "List of subnet IDs for the VPC connector"
+  description = "List of subnet IDs for VPC connector"
   type        = list(string)
 }
 
 variable "vpc_security_groups" {
-  description = "List of security group IDs for the VPC connector"
+  description = "List of security group IDs for VPC connector"
   type        = list(string)
 }
 
@@ -38,6 +37,12 @@ variable "jwt_secret" {
 
 variable "openai_api_key" {
   description = "OpenAI API key"
+  type        = string
+  sensitive   = true
+}
+
+variable "pinecone_api_key" {
+  description = "Pinecone API key for vector database"
   type        = string
   sensitive   = true
 } 

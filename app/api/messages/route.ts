@@ -5,6 +5,7 @@ import { openai } from '@ai-sdk/openai';
 import { generateText, streamText } from 'ai';
 import pdfParse from 'pdf-parse';
 import { trackEvent } from '../../lib/analytics';
+import { storeDocumentChunks, retrieveRelevantContext } from '../../lib/vectorStore';
 
 const prisma = new PrismaClient();
 
@@ -20,7 +21,7 @@ GUIDELINES
      - 4–6 key bullet points highlighting the most important details.
    - Maintain the original meaning while avoiding unnecessary repetition.
    - If the user does not provide additional instructions, default to summarizing the content.
-   - judge the locale of the content and answer in the same language.
+   - Judge the locale of the content and answer in the same language.
 
 2. FOLLOW-UP INTERACTIONS:
    - For any subsequent interactions or questions, **do NOT** automatically provide a summary or bullet points unless explicitly requested.
@@ -50,9 +51,19 @@ The following is the summary for the [text/pdf/link] you provided:
    - Do not add or fabricate details not present in the original source.
    - If certain details are absent or unclear, state this clearly.
 
+5. WORKING WITH LARGE DOCUMENTS:
+   - For large documents, only a summary is stored in the conversation history.
+   - For follow-up questions about specific details, the system will automatically retrieve the most relevant sections.
+   - Use this retrieved context to provide accurate answers, but acknowledge when information might be incomplete.
+   - Only reference information present in the retrieved context or conversation history.
+   - If relevant content isn't available in the retrieved context, mention this limitation to the user.
+
+6. VECTOR RETRIEVAL:
+   - When you see context labeled "Here are some relevant sections from the previously provided content", these are sections retrieved from the vector database based on the user's query.
+   - Use this retrieved information to provide specific, accurate answers.
+   - Be transparent about using retrieved information vs. information available in the conversation history.
+
 Your goal is to save users time by providing accurate, context-aware responses.
-
-
 `;
 
 // Types for better code organization
@@ -152,10 +163,7 @@ async function processPdfContent(file: File): Promise<{ content: string, fileNam
     const buffer = Buffer.from(arrayBuffer);
     const pdfData = await pdfParse(buffer);
 
-    const maxLength = 10000;
-    if (pdfData.text.length > maxLength) {
-      pdfData.text = pdfData.text.substring(0, maxLength) + '... (content truncated due to length)';
-    }
+    // We don't need to truncate anymore as we'll store in vector DB
     return {
       content: pdfData.text,
       fileName: file.name,
@@ -212,13 +220,7 @@ async function scrapeWebContent(url: string): Promise<string> {
       .replace(/\s+/g, ' ')
       .trim();
     
-    // Limit content size
-    const maxLength = 10000;
-    if (text.length > maxLength) {
-      text = text.substring(0, maxLength) + '... (content truncated due to length)';
-    }
-    
-    console.log(`Scraped ${text.length} characters from ${url}`);
+    // No need to truncate anymore as we'll store in vector DB
     return text;
   } catch (error) {
     console.error('Web scraping error:', error);
@@ -412,29 +414,72 @@ interface AIMessage {
 // Update the function to handle Prisma Message type
 function formatMessagesForAI(messages: any[]): AIMessage[] {
   return messages.map(msg => {
-    if (msg.contentType === 'pdf') {
+    // Handle messages with hasFullContent=true (complete content in DB)
+    if (msg.hasFullContent) {
+      const contentType = msg.contentType;
+      let contentPrefix = "";
+      
+      if (contentType === 'pdf') {
+        contentPrefix = "Here is a summary of the PDF content (full content available via search):\n\n";
+      } else if (contentType === 'link') {
+        contentPrefix = `Here is a summary of the web page content from ${msg.linkUrl} (full content available via search):\n\n`;
+      } else {
+        contentPrefix = "Here is a summary of the content (full content available via search):\n\n";
+      }
+      
       return {
         role: 'user',
-        content: "Here is the PDF content:\n\n" + msg.content,
-        contentType: 'pdf'
-      };
-    } else if (msg.contentType === 'link') {
-      return {
-        role: 'user',
-        content: `Here is content from the web page (${msg.linkUrl}):\n\n${msg.content}`,
-        contentType: 'link'
-      };
-    } else {
-      return {
-        role: msg.senderType === 'user' ? 'user' : 'assistant',
-        content: msg.content,
+        content: contentPrefix + msg.content,
         contentType: msg.contentType
       };
+    }
+    // Handle messages with hasFullContent=false (truncated content, full content in vector DB)
+    else if (msg.content.endsWith('...(truncated)')) {
+      const contentType = msg.contentType;
+      let contentPrefix = "";
+      
+      if (contentType === 'pdf') {
+        contentPrefix = "Here is a truncated version of the PDF content (detailed parts will be retrieved on demand):\n\n";
+      } else if (contentType === 'link') {
+        contentPrefix = `Here is a truncated version of the web page content from ${msg.linkUrl} (detailed parts will be retrieved on demand):\n\n`;
+      } else {
+        contentPrefix = "Here is a truncated version of the content (detailed parts will be retrieved on demand):\n\n";
+      }
+      
+      return {
+        role: 'user',
+        content: contentPrefix + msg.content,
+        contentType: msg.contentType
+      };
+    }
+    // Handle regular messages (not summarized, full content in DB)
+    else {
+      if (msg.contentType === 'pdf') {
+        return {
+          role: 'user',
+          content: "Here is the PDF content:\n\n" + msg.content,
+          contentType: 'pdf'
+        };
+      } 
+      else if (msg.contentType === 'link') {
+        return {
+          role: 'user',
+          content: `Here is content from the web page (${msg.linkUrl}):\n\n${msg.content}`,
+          contentType: 'link'
+        };
+      } 
+      else {
+        return {
+          role: msg.senderType === 'user' ? 'user' : 'assistant',
+          content: msg.content,
+          contentType: msg.contentType
+        };
+      }
     }
   });
 }
 
-// Updated generateAIResponse to handle streaming
+// Updated to include context retrieval for AI processing
 async function generateAIResponse(messages: AIMessage[], threadId: number, userId: number) {
   // Add the system prompt
   const messagesWithPrompt = [
@@ -442,8 +487,168 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
     ...messages
   ];
   
+  // Check if the last message is a user query that might need context
+  const lastMessageIndex = messages.length - 1;
+  const lastMessage = messages[lastMessageIndex];
+  let retrievedContext = '';
+  let retrievalMessageId: number | null = null;
+  
+  // Check if the thread already has messages with full content
   try {
-    console.log('messages: ', messages);
+    const threadMessages = await prisma.message.findMany({
+      where: { 
+        threadId: threadId,
+        hasFullContent: true 
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    // If there are messages with full content in the thread
+    if (threadMessages.length > 0) {
+      console.log(`Thread ${threadId} has ${threadMessages.length} messages with full content`);
+      
+      // Get the primary summary if it exists (for context)
+      const primarySummary = threadMessages.find(msg => msg.summaryType === 'primary');
+      
+      if (primarySummary) {
+        console.log('Thread contains primary summary, skipping vector retrieval');
+        
+        // Add a note to inform the AI that it's working with summarized content
+        messagesWithPrompt.splice(1, 0, {
+          role: 'system',
+          content: 'Note: This thread contains summarized content from a longer text. Your response should be based on the summary as provided.'
+        });
+        
+        // Track this decision for analytics
+        await trackEvent({
+          eventType: 'content_processing',
+          userId,
+          threadId,
+          properties: {
+            skipVectorRetrieval: true,
+            reason: 'hasPrimarySummary',
+            processingType: 'ai_response'
+          }
+        });
+        
+        // Skip vector retrieval
+        return await processAIRequest(messagesWithPrompt, threadId, userId);
+      }
+    }
+    
+    // No primary summary found, try vector retrieval if appropriate
+    if (lastMessage && lastMessage.role === 'user' && messages.length > 1) {
+      try {
+        // Get the actual messages from the database to find the message ID
+        const dbMessages = await prisma.message.findMany({
+          where: { threadId: threadId },
+          orderBy: { createdAt: 'asc' },
+        });
+        
+        // Get the last user message
+        const lastUserMessage = dbMessages.length > 0 ? 
+                               dbMessages[dbMessages.length - 1] : null;
+        
+        // Check if the last user message already has retrieved context
+        if (lastUserMessage && lastUserMessage.retrievedContext) {
+          console.log(`Using existing retrieved context from message ID: ${lastUserMessage.id}`);
+          
+          // Use existing retrieved context
+          retrievedContext = lastUserMessage.retrievedContext;
+          retrievalMessageId = lastUserMessage.id;
+          
+          // Append it to the last user message
+          const contextPrefix = "\n\nRelevant context from previously provided content:\n\n";
+          messagesWithPrompt[lastMessageIndex + 1].content += contextPrefix + retrievedContext;
+          
+          // Track reuse of context for analytics
+          await trackEvent({
+            eventType: 'content_processing',
+            userId,
+            threadId,
+            properties: {
+              retrievalType: 'reused',
+              processingType: 'ai_response'
+            }
+          });
+        } else {
+          // Retrieve relevant context for the user's query
+          console.log('Retrieving new context from vector database');
+          const result = await retrieveRelevantContext(lastMessage.content, threadId, 4); // Increase to 4 chunks
+
+          // Safely access properties with optional chaining
+          const success = result?.success;
+          const chunks = result?.chunks || 0;
+          const context = result?.context || '';
+          const errorMsg = 'error' in result ? result.error : '';
+
+          if (success && chunks > 0 && context) {
+            // Store retrieved context immediately
+            retrievedContext = context;
+            
+            // Create a retrieval context message in the database immediately
+            if (lastUserMessage && lastUserMessage.id) {
+              await prisma.message.update({
+                where: { id: lastUserMessage.id },
+                data: { 
+                  retrievedContext: context 
+                }
+              });
+              retrievalMessageId = lastUserMessage.id;
+              
+              console.log(`Stored retrieved context with message ID: ${lastUserMessage.id}`);
+            }
+            
+            // Instead of inserting a new system message, append the context to the last user message
+            // This preserves the original message structure for prompt caching
+            const contextPrefix = "\n\nRelevant context from previously provided content:\n\n";
+            messagesWithPrompt[lastMessageIndex + 1].content += contextPrefix + context;
+            
+            console.log(`Appended ${chunks} context chunks to the last user message`);
+          } else if (!success) {
+            // Let the AI know we're working with limited context but without changing the message structure
+            messagesWithPrompt[0].content += "\n\nNote: The vector storage system is currently unavailable. Your response should be based only on the content visible in this conversation, which may be truncated for large documents.";
+            
+            console.log('Vector retrieval failed, adding warning to system prompt');
+            
+            // Track error for monitoring
+            await trackEvent({
+              eventType: 'error_occurred',
+              userId,
+              threadId,
+              properties: {
+                errorType: 'vector_retrieval_failed',
+                errorMessage: errorMsg || 'Unknown error'
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error retrieving context:', error);
+        // Continue without context if retrieval fails
+      }
+    }
+  } catch (error) {
+    console.error('Error checking thread messages:', error);
+    // Continue without context if there's an error
+  }
+  
+  // Process the AI request with the prepared messages and include retrieved context
+  return await processAIRequest(messagesWithPrompt, threadId, userId, retrievedContext, retrievalMessageId);
+}
+
+// Helper function to process the AI request with prepared messages
+async function processAIRequest(
+  messagesWithPrompt: any[], 
+  threadId: number, 
+  userId: number, 
+  retrievedContext: string = '',
+  retrievalMessageId: number | null = null
+) {
+  try {
+    console.log('messagesWithPrompt: ', messagesWithPrompt);
     const result = streamText({
       model: openai('gpt-4o'),
       messages: messagesWithPrompt as any,
@@ -463,7 +668,8 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
           threadId,
           properties: {
             errorType: 'ai_generation',
-            errorMessage: (error as Error).message
+            errorMessage: (error as Error).message,
+            hasRetrievedContext: retrievedContext.length > 0
           }
         });
       },
@@ -483,7 +689,8 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
             completionTokens: usage?.completionTokens || 0,
             totalTokens: usage?.totalTokens || 0,
             model: 'gpt-4o',
-            cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens || false
+            cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens || false,
+            usedRetrievedContext: retrievedContext.length > 0
           }
         });
         
@@ -501,6 +708,8 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
             senderType: 'assistant',
             contentType: 'text',
             content: text,
+            retrievedContext: retrievedContext, // Also store the retrieved context with the AI response
+            retrievalMessageId: retrievalMessageId // Link to the message that had the retrieval
           },
         });
         
@@ -510,8 +719,9 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
           userId,
           threadId,
           properties: {
-            messageType: messages[messages.length - 1]?.contentType || 'text',
-            responseLength: text.length
+            messageType: messagesWithPrompt[messagesWithPrompt.length - 2]?.contentType || 'text', // Last user message (account for system prompt)
+            responseLength: text.length,
+            usedRetrievedContext: retrievedContext.length > 0
           }
         });
       }
@@ -534,7 +744,8 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
       threadId,
       properties: {
         errorType: 'ai_generation',
-        errorMessage: (error as Error).message
+        errorMessage: (error as Error).message,
+        hasRetrievedContext: retrievedContext.length > 0
       }
     });
     
@@ -589,10 +800,30 @@ export async function PUT(request: NextRequest) {
       allMessages.pop();
     }
     
-    // 6. Format messages for AI
+    // 6. Check if the last user message already has retrieved context
+    const lastUserMessage = allMessages.length > 0 ? allMessages[allMessages.length - 1] : null;
+    let hasRetrievedContext = false;
+    
+    if (lastUserMessage && lastUserMessage.retrievedContext) {
+      hasRetrievedContext = true;
+      console.log(`Retry will reuse retrieved context from message ID: ${lastUserMessage.id}`);
+      
+      // Track reuse of context for analytics
+      await trackEvent({
+        eventType: 'content_processing',
+        userId,
+        threadId,
+        properties: {
+          retrievalType: 'reused_on_retry',
+          processingType: 'ai_response'
+        }
+      });
+    }
+    
+    // 7. Format messages for AI
     const formattedMessages = formatMessagesForAI(allMessages);
     
-    // 7. Generate AI response with streaming
+    // 8. Generate AI response with streaming
     try {
       // Get the streamText result
       const stream = await generateAIResponse(formattedMessages, thread.id, userId);
@@ -600,12 +831,14 @@ export async function PUT(request: NextRequest) {
       // Return streaming response with thread ID in headers
       const response = stream.toTextStreamResponse();
       response.headers.set('x-thread-id', thread.id.toString());
+      response.headers.set('x-has-retrieved-context', hasRetrievedContext.toString());
       return response;
     } catch (error) {
       // If AI generation fails, we return error
       return NextResponse.json({ 
         error: 'Failed to generate AI response',
         threadId: thread.id,
+        hasRetrievedContext
       }, { status: 500 });
     }
   } catch (error: any) {
@@ -629,7 +862,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Update the POST handler to support streaming
+// Update the POST handler to store content in vector DB
 export async function POST(request: NextRequest) {
   try {
     // 1. Authenticate user
@@ -652,9 +885,96 @@ export async function POST(request: NextRequest) {
 
     // Save all user messages
     const savedUserMessages = [];
+    const CONTENT_MAX_LENGTH = 12000; // Maximum length that can be stored in the database field
+    const TEXT_SUMMARY_THRESHOLD = 3000; // Threshold to mark text content as summary-worthy
+    
     for (const messageData of userMessages) {
-      const message = await prisma.message.create({ data: messageData });
-      savedUserMessages.push(message);
+      // Check if content exceeds database field length limit
+      const isLongContent = messageData.content.length > CONTENT_MAX_LENGTH;
+      
+      // Check if text content is long enough to be considered for summary but below DB limit
+      const isTextSummaryContent = messageData.contentType === 'text' && 
+                                  messageData.content.length > TEXT_SUMMARY_THRESHOLD && 
+                                  messageData.content.length <= CONTENT_MAX_LENGTH;
+      
+      // PDF and link content should always be marked with hasFullContent regardless of size
+      const isPdfOrLink = messageData.contentType === 'pdf' || messageData.contentType === 'link';
+      
+      if (isLongContent) {
+        // Create database record version for long content
+        const dbMessageData = {
+          ...messageData,
+          content: messageData.content.substring(0, CONTENT_MAX_LENGTH - 100) + '...(truncated)',
+          hasFullContent: false, // This content is truncated, so hasFullContent should be false
+          summaryType: 'primary' // Mark as the primary summary for the thread
+        };
+        
+        // Save message summary to database
+        const message = await prisma.message.create({ data: dbMessageData });
+        savedUserMessages.push(message);
+        
+        // Save full content to vector database
+        await storeDocumentChunks(messageData.content, {
+          threadId: message.threadId,
+          messageId: message.id,
+          contentType: message.contentType,
+          userId: userId
+        });
+        
+        // Record vector storage event
+        await trackEvent({
+          eventType: 'vector_storage',
+          userId: userId,
+          threadId: message.threadId,
+          messageId: message.id,
+          properties: {
+            contentType: message.contentType,
+            contentLength: messageData.content.length
+          }
+        });
+      } else if (isTextSummaryContent || isPdfOrLink) {
+        // For text content that's long enough to be summarized but doesn't exceed DB limits
+        // OR for PDF and link content that should always be marked with hasFullContent
+        
+        // Check if this thread already has a primary summary
+        const existingSummaries = await prisma.message.findMany({
+          where: {
+            threadId: messageData.threadId,
+            hasFullContent: true
+          }
+        });
+
+        // Determine the summary type based on existing summaries and content type
+        // PDF and link content should always be primary if they are the first summary in the thread
+        const summaryType = existingSummaries.length === 0 ? 'primary' : 'additional';
+        
+        const message = await prisma.message.create({ 
+          data: {
+            ...messageData,
+            hasFullContent: true, // Not truncated, full content is in the DB
+            summaryType
+          }
+        });
+        savedUserMessages.push(message);
+        
+        // Track event for content processing
+        await trackEvent({
+          eventType: 'content_processing',
+          userId: userId,
+          threadId: message.threadId,
+          messageId: message.id,
+          properties: {
+            contentType: messageData.contentType,
+            contentLength: messageData.content.length,
+            processingType: 'summary',
+            summaryType
+          }
+        });
+      } else {
+        // Regular content saved directly - not summarized, not truncated
+        const message = await prisma.message.create({ data: messageData });
+        savedUserMessages.push(message);
+      }
     }
     
     // 5. Get all messages in thread

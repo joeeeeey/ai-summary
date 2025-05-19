@@ -65,6 +65,7 @@ resource "aws_apprunner_service" "service" {
           "DATABASE_URL" = var.database_url
           "JWT_SECRET"   = var.jwt_secret
           "OPENAI_API_KEY" = var.openai_api_key
+          "PINECONE_API_KEY" = var.pinecone_api_key
         }
       }
       image_identifier      = var.image_identifier
