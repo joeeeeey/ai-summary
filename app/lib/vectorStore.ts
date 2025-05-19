@@ -6,18 +6,33 @@ import { PineconeStore } from '@langchain/pinecone';
 import type { Index } from '@pinecone-database/pinecone';
 
 // Initialize Pinecone client
-const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY || '',
-});
+// Lazy initialization to avoid issues during build time
+let pineconeClient: Pinecone | null = null;
+
+function getPineconeClient(): Pinecone {
+  if (!pineconeClient) {
+    pineconeClient = new Pinecone({
+      apiKey: process.env.PINECONE_API_KEY || '',
+    });
+  }
+  return pineconeClient;
+}
 
 // Index name - each different app should use its own index
 const PINECONE_INDEX_NAME = 'ai-summary';
 
-// Set up OpenAI embeddings
-const embeddings = new OpenAIEmbeddings({
-  openAIApiKey: process.env.OPENAI_API_KEY,
-  model: 'text-embedding-ada-002', // Most cost-effective embedding model
-});
+// Set up OpenAI embeddings - lazy initialization
+let openAiEmbeddings: OpenAIEmbeddings | null = null;
+
+function getEmbeddings(): OpenAIEmbeddings {
+  if (!openAiEmbeddings) {
+    openAiEmbeddings = new OpenAIEmbeddings({
+      openAIApiKey: process.env.OPENAI_API_KEY,
+      model: 'text-embedding-ada-002', // Most cost-effective embedding model
+    });
+  }
+  return openAiEmbeddings;
+}
 
 // Configuration constants
 const TIMEOUT_MS = 8000; // 5 second timeout for vector operations
@@ -33,7 +48,7 @@ async function getOrCreateIndex(): Promise<Index> {
     });
 
     const indexPromise = async () => {
-      const indexes = await pinecone.listIndexes();
+      const indexes = await getPineconeClient().listIndexes();
       
       // Check if our index already exists
       const indexExists = indexes.indexes?.some((i: { name: string }) => i.name === PINECONE_INDEX_NAME) || false;
@@ -41,7 +56,7 @@ async function getOrCreateIndex(): Promise<Index> {
       if (!indexExists) {
         try {
           // Create the index if it doesn't exist
-          await pinecone.createIndex({ 
+          await getPineconeClient().createIndex({ 
             name: PINECONE_INDEX_NAME,
             dimension: 1536, // Dimension size for OpenAI embeddings
             metric: 'cosine',
@@ -60,7 +75,7 @@ async function getOrCreateIndex(): Promise<Index> {
         }
       }
       
-      return pinecone.index(PINECONE_INDEX_NAME);
+      return getPineconeClient().index(PINECONE_INDEX_NAME);
     };
     
     // Race the index operation against the timeout
@@ -153,7 +168,7 @@ export async function storeDocumentChunks(
             await withTimeoutAndRetry(async () => {
               await PineconeStore.fromDocuments(
                 batch, 
-                embeddings, 
+                getEmbeddings(), 
                 {
                   pineconeIndex: index,
                   namespace: `thread-${metadata.threadId}`,
@@ -175,7 +190,7 @@ export async function storeDocumentChunks(
         await withTimeoutAndRetry(async () => {
           await PineconeStore.fromDocuments(
             documents, 
-            embeddings, 
+            getEmbeddings(), 
             {
               pineconeIndex: index,
               namespace: `thread-${metadata.threadId}`,
@@ -221,7 +236,7 @@ export async function retrieveRelevantContext(
       // Initialize PineconeStore with the index and perform search with timeout
       const retrieveResults = await withTimeoutAndRetry(async () => {
         const vectorStore = await PineconeStore.fromExistingIndex(
-          embeddings,
+          getEmbeddings(),
           {
             pineconeIndex: index,
             namespace: `thread-${threadId}`
