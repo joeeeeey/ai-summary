@@ -105,9 +105,17 @@ yarn dev
 The project is configured for AWS deployment using Terraform:
 
 ```bash
-cd terraform
-terraform init
-terraform apply
+# init
+make tf-init
+# plan
+make tf-plan
+# apply
+make tf-apply
+```
+
+Update container image by:
+```bash
+make update-docker-image
 ```
 
 After deployment, you can trigger new deployments with:

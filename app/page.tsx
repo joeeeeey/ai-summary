@@ -209,25 +209,31 @@ function MainContent(): React.ReactNode {
 
     setIsSubmitting(true);
 
-    // 创建临时消息对象并立即添加到UI，标记为发送中
-    const tempMessage: Message & { isPending?: boolean } = {
-      id: Date.now(), // 临时ID
+    // Create temporary message object
+    const tempMessage: Message = {
+      id: Date.now(),
       senderType: 'user',
       content: input.trim(),
       contentType: pdfFile ? 'pdf' : 'text',
       fileName: pdfFile?.name,
       createdAt: new Date().toISOString(),
-      isPending: true // 标记消息为发送中状态
+      isPending: true
     };
 
-    // 立即更新UI显示用户消息
-    setMessages(prev => [...prev, tempMessage]);
+    // Add temporary AI message for streaming
+    const tempAIMessage: Message = {
+      id: Date.now() + 1,
+      senderType: 'assistant',
+      content: '',
+      contentType: 'text',
+      createdAt: new Date().toISOString(),
+      isPending: true
+    };
 
-    // 保存当前输入，以便可能需要恢复
-    const currentInput = input.trim();
-    const currentFile = pdfFile;
+    // Update UI immediately with both messages
+    setMessages(prev => [...prev, tempMessage, tempAIMessage]);
 
-    // 清空输入框和文件选择
+    // Clear input and file
     setInput('');
     setPdfFile(null);
     if (fileInputRef.current) {
@@ -237,13 +243,13 @@ function MainContent(): React.ReactNode {
     try {
       const formData = new FormData();
 
-      if (currentInput) {
-        formData.append('text', currentInput);
+      if (input) {
+        formData.append('text', input);
       }
 
-      if (currentFile) {
-        formData.append('file', currentFile);
-        formData.append('fileName', currentFile.name);
+      if (pdfFile) {
+        formData.append('file', pdfFile);
+        formData.append('fileName', pdfFile.name);
       }
 
       if (selectedThreadId) {
@@ -255,60 +261,85 @@ function MainContent(): React.ReactNode {
         body: formData,
       });
 
-      const responseData = await response.json();
-
       if (response.ok) {
-        if (!selectedThreadId && responseData.threadId) {
-          setSelectedThreadId(responseData.threadId);
-          router.push(`/?threadId=${responseData.threadId}`);
+        if (!response.body) {
+          throw new Error('No response body');
+        }
 
-          // 更新临时消息状态为已发送（移除isPending标记）
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.id === tempMessage.id ? { ...msg, isPending: false } : msg
+        // Handle streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Decode the chunk and add to accumulated content
+          const chunk = decoder.decode(value);
+          accumulatedContent += chunk;
+
+          // Update the AI message content in real-time
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === tempAIMessage.id 
+                ? { ...msg, content: accumulatedContent }
+                : msg
             )
           );
+        }
 
-          // 刷新线程列表
-          const threadsResponse = await fetch('/api/threads');
-          if (threadsResponse.ok) {
-            const threadsData = await threadsResponse.json();
-            setThreads(threadsData.threads);
-          }
-        } else if (selectedThreadId) {
-          // If there was an AI processing error but the user message was saved
-          if (responseData.aiError) {
-            // Just fetch messages to show the user message without AI response
-            fetchMessages(selectedThreadId);
-            
-            // Refresh threads to get updated status
+        // Update messages to remove pending state
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempMessage.id || msg.id === tempAIMessage.id
+              ? { ...msg, isPending: false }
+              : msg
+          )
+        );
+
+        if (!selectedThreadId) {
+          // Get the thread ID from the response headers
+          const threadId = response.headers.get('x-thread-id');
+          if (threadId) {
+            setSelectedThreadId(Number(threadId));
+            router.push(`/?threadId=${threadId}`);
+
+            // Refresh thread list
             const threadsResponse = await fetch('/api/threads');
             if (threadsResponse.ok) {
               const threadsData = await threadsResponse.json();
               setThreads(threadsData.threads);
             }
-          } else {
-            // Get all messages including new AI response
-            fetchMessages(selectedThreadId);
+          }
+        } else {
+          // Refresh thread list to update status
+          const threadsResponse = await fetch('/api/threads');
+          if (threadsResponse.ok) {
+            const threadsData = await threadsResponse.json();
+            setThreads(threadsData.threads);
           }
         }
       } else {
-        console.error('Error submitting message:', responseData.error);
-        alert(`Error: ${responseData.error || 'Failed to send message'}`);
-
-        // 发送失败时，移除临时消息并恢复输入
-        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
-        setInput(currentInput);
-        setPdfFile(currentFile);
+        const data = await response.json();
+        console.error('Error sending message:', data.error);
+        
+        // Remove both temporary messages on error
+        setMessages(prev => 
+          prev.filter(m => m.id !== tempMessage.id && m.id !== tempAIMessage.id)
+        );
+        
+        alert('Failed to send message. Please try again.');
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('An error occurred while sending your message.');
-
-      // 发生错误时，移除临时消息并恢复输入
-      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
-      setInput(currentInput);
-      setPdfFile(currentFile);
+      
+      // Remove both temporary messages on error
+      setMessages(prev => 
+        prev.filter(m => m.id !== tempMessage.id && m.id !== tempAIMessage.id)
+      );
+      
+      alert('An error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -327,19 +358,27 @@ function MainContent(): React.ReactNode {
     setIsSubmitting(true);
     
     try {
-      // Show loading state by marking the last user message as pending
+      // Find the last user message and the failed assistant message (if it exists)
+      const userMessages = messages.filter(msg => msg.senderType === 'user');
+      const lastUserMessage = userMessages[userMessages.length - 1];
+      
+      // Create temporary AI message for streaming
+      const tempAIMessage: Message = {
+        id: Date.now(),
+        senderType: 'assistant',
+        content: '',
+        contentType: 'text',
+        createdAt: new Date().toISOString(),
+        isPending: true
+      };
+      
+      // Add temporary AI message to UI
       setMessages(prev => {
-        const lastUserMessageIndex = prev
-          .map((msg, index) => ({ ...msg, index }))
-          .filter(msg => msg.senderType === 'user')
-          .pop()?.index;
-        
-        if (lastUserMessageIndex !== undefined) {
-          return prev.map((msg, index) => 
-            index === lastUserMessageIndex ? { ...msg, isPending: true } : msg
-          );
-        }
-        return prev;
+        // Filter out any existing failed AI messages if present
+        const filteredMessages = prev.filter(msg => 
+          !(msg.senderType === 'assistant' && messages.indexOf(msg) > messages.indexOf(lastUserMessage))
+        );
+        return [...filteredMessages, tempAIMessage];
       });
       
       // Call the retry API endpoint
@@ -352,10 +391,43 @@ function MainContent(): React.ReactNode {
       });
       
       if (response.ok) {
-        // Refresh messages to get the new AI response
-        fetchMessages(threadId);
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        // Handle streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Decode the chunk and add to accumulated content
+          const chunk = decoder.decode(value);
+          accumulatedContent += chunk;
+
+          // Update the AI message content in real-time
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === tempAIMessage.id 
+                ? { ...msg, content: accumulatedContent }
+                : msg
+            )
+          );
+        }
+
+        // Update messages to remove pending state
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempAIMessage.id
+              ? { ...msg, isPending: false }
+              : msg
+          )
+        );
         
-        // Also refresh threads to update status
+        // Refresh thread list to update status
         const threadsResponse = await fetch('/api/threads');
         if (threadsResponse.ok) {
           const threadsData = await threadsResponse.json();
@@ -364,21 +436,23 @@ function MainContent(): React.ReactNode {
       } else {
         const data = await response.json();
         console.error('Retry failed:', data.error);
-        alert(`Error: ${data.error || 'Failed to retry'}`);
         
-        // Remove pending state
+        // Remove temporary message and show error
         setMessages(prev => 
-          prev.map(msg => ({ ...msg, isPending: false }))
+          prev.filter(msg => msg.id !== tempAIMessage.id)
         );
+        
+        alert(`Error: ${data.error || 'Failed to retry'}`);
       }
     } catch (error) {
       console.error('Error during retry:', error);
-      alert('An error occurred while retrying.');
       
-      // Remove pending state
+      // Remove temporary AI message
       setMessages(prev => 
-        prev.map(msg => ({ ...msg, isPending: false }))
+        prev.filter(msg => msg.senderType !== 'assistant' || !msg.isPending)
       );
+      
+      alert('An error occurred while retrying.');
     } finally {
       setIsSubmitting(false);
     }

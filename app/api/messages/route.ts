@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { openai } from '@ai-sdk/openai';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import pdfParse from 'pdf-parse';
 import { trackEvent } from '../../lib/analytics';
 
@@ -406,6 +406,7 @@ async function createMessageData(
 interface AIMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  contentType?: string;
 }
 
 // Update the function to handle Prisma Message type
@@ -415,22 +416,25 @@ function formatMessagesForAI(messages: any[]): AIMessage[] {
       return {
         role: 'user',
         content: "Here is the PDF content:\n\n" + msg.content,
+        contentType: 'pdf'
       };
     } else if (msg.contentType === 'link') {
       return {
         role: 'user',
         content: `Here is content from the web page (${msg.linkUrl}):\n\n${msg.content}`,
+        contentType: 'link'
       };
     } else {
       return {
         role: msg.senderType === 'user' ? 'user' : 'assistant',
         content: msg.content,
+        contentType: msg.contentType
       };
     }
   });
 }
 
-// Updated generateAIResponse to handle errors properly
+// Updated generateAIResponse to handle streaming
 async function generateAIResponse(messages: AIMessage[], threadId: number, userId: number) {
   // Add the system prompt
   const messagesWithPrompt = [
@@ -440,37 +444,80 @@ async function generateAIResponse(messages: AIMessage[], threadId: number, userI
   
   try {
     console.log('messages: ', messages);
-    const { text, usage, providerMetadata } = await generateText({
+    const result = streamText({
       model: openai('gpt-4o'),
       messages: messagesWithPrompt as any,
-    });
-    
-    console.log('Usage:', {
-      ...usage,
-      cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens,
-    });
-    
-    // Track LLM token usage event
-    await trackEvent({
-      eventType: 'llm_token_usage',
-      userId,
-      threadId,
-      properties: {
-        promptTokens: usage?.promptTokens || 0,
-        completionTokens: usage?.completionTokens || 0,
-        totalTokens: usage?.totalTokens || 0,
-        model: 'gpt-4o',
-        cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens || false
+      onError: async ({ error }) => {
+        console.error('Streaming error:', error);
+        
+        // Update thread status to failed
+        await prisma.thread.update({
+          where: { id: threadId },
+          data: { status: "failed" }
+        });
+        
+        // Track error event
+        await trackEvent({
+          eventType: 'error_occurred',
+          userId,
+          threadId,
+          properties: {
+            errorType: 'ai_generation',
+            errorMessage: (error as Error).message
+          }
+        });
+      },
+      onFinish: async ({ text, usage, providerMetadata }) => {
+        console.log('Usage:', {
+          ...usage,
+          cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens,
+        });
+        
+        // Track LLM token usage event
+        await trackEvent({
+          eventType: 'llm_token_usage',
+          userId,
+          threadId,
+          properties: {
+            promptTokens: usage?.promptTokens || 0,
+            completionTokens: usage?.completionTokens || 0,
+            totalTokens: usage?.totalTokens || 0,
+            model: 'gpt-4o',
+            cachedPromptTokens: providerMetadata?.openai?.cachedPromptTokens || false
+          }
+        });
+        
+        // Update thread status to success
+        await prisma.thread.update({
+          where: { id: threadId },
+          data: { status: "success" }
+        });
+        
+        // Save the complete AI response
+        await prisma.message.create({
+          data: {
+            threadId,
+            userId,
+            senderType: 'assistant',
+            contentType: 'text',
+            content: text,
+          },
+        });
+        
+        // Track successful summary event
+        await trackEvent({
+          eventType: 'summarize_success',
+          userId,
+          threadId,
+          properties: {
+            messageType: messages[messages.length - 1]?.contentType || 'text',
+            responseLength: text.length
+          }
+        });
       }
     });
     
-    // Update thread status to success
-    await prisma.thread.update({
-      where: { id: threadId },
-      data: { status: "success" }
-    });
-    
-    return text;
+    return result;
   } catch (error) {
     console.error('AI generation error:', error);
     
@@ -545,38 +592,22 @@ export async function PUT(request: NextRequest) {
     // 6. Format messages for AI
     const formattedMessages = formatMessagesForAI(allMessages);
     
-    // 7. Generate AI response
-    const aiResponse = await generateAIResponse(formattedMessages, thread.id, userId);
-    
-    // 8. Save AI response
-    const aiMessage = await prisma.message.create({
-      data: {
+    // 7. Generate AI response with streaming
+    try {
+      // Get the streamText result
+      const stream = await generateAIResponse(formattedMessages, thread.id, userId);
+      
+      // Return streaming response with thread ID in headers
+      const response = stream.toTextStreamResponse();
+      response.headers.set('x-thread-id', thread.id.toString());
+      return response;
+    } catch (error) {
+      // If AI generation fails, we return error
+      return NextResponse.json({ 
+        error: 'Failed to generate AI response',
         threadId: thread.id,
-        userId,
-        senderType: 'assistant',
-        contentType: 'text',
-        content: aiResponse,
-      },
-    });
-    
-    // Track successful retry event
-    await trackEvent({
-      eventType: 'summarize_success',
-      userId,
-      threadId: thread.id,
-      messageId: aiMessage.id,
-      properties: {
-        messageType: allMessages[allMessages.length - 1]?.contentType || 'text',
-        responseLength: aiResponse.length,
-        isRetry: true
-      }
-    });
-    
-    return NextResponse.json({ 
-      message: 'Retry successful.', 
-      threadId: thread.id 
-    }, { status: 200 });
-    
+      }, { status: 500 });
+    }
   } catch (error: any) {
     console.error('Error during retry:', error);
     
@@ -598,7 +629,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Update the POST handler to use the updated generateAIResponse function and handle thread status
+// Update the POST handler to support streaming
 export async function POST(request: NextRequest) {
   try {
     // 1. Authenticate user
@@ -635,37 +666,14 @@ export async function POST(request: NextRequest) {
     // 6. Format messages for AI
     const formattedMessages = formatMessagesForAI(allMessages);
     
-    // 7. Generate AI response
+    // 7. Generate AI response with streaming
     try {
-      const aiResponse = await generateAIResponse(formattedMessages, thread.id, userId);
+      const stream = await generateAIResponse(formattedMessages, thread.id, userId);
       
-      // 8. Save AI response
-      const aiMessage = await prisma.message.create({
-        data: {
-          threadId: thread.id,
-          userId,
-          senderType: 'assistant',
-          contentType: 'text',
-          content: aiResponse,
-        },
-      });
-      
-      // Track successful summary event
-      await trackEvent({
-        eventType: 'summarize_success',
-        userId,
-        threadId: thread.id,
-        messageId: aiMessage.id,
-        properties: {
-          messageType: userMessages[0]?.contentType || 'text',
-          responseLength: aiResponse.length
-        }
-      });
-      
-      return NextResponse.json({ 
-        message: 'Message sent.', 
-        threadId: thread.id 
-      }, { status: 201 });
+      // Create streaming response with thread ID in headers
+      const response = stream.toTextStreamResponse();
+      response.headers.set('x-thread-id', thread.id.toString());
+      return response;
     } catch (error) {
       // If AI generation fails, we still return success but with a flag indicating failure
       // The UI will show the retry button
